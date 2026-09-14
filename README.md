@@ -1,141 +1,77 @@
-# Agenda Nacional Kart
+# NK Agenda
 
-Sistema de agendamento de baterias para o kartódromo Nacional Kart (unidades Goiânia e São Paulo).
+Agenda de baterias do kartódromo Nacional Kart (Goiânia, Penha, Osasco e Morumbi), para as atendentes
+verem rápido se cabe um grupo num horário e reservar sem estourar a capacidade.
 
-Arquivo único, sem build e sem dependências: abra `agenda-nacional-kart.html` no navegador e funciona.
+- **Sellflux é a fonte de verdade dos agendamentos.** Cada unidade é um usuário da Sellflux
+  ("Recepção - Goiânia" etc.); a agenda desse usuário é a agenda de karts da unidade.
+- **Capacidade e horários são deste app** — a Sellflux não tem esse conceito. Ficam na tabela
+  `nk_unidades` (Supabase) e são editados na tela **Configuração**.
+- Uma reserva = um agendamento na Sellflux com título `Nome Np` e descrição padronizada, vinculado ao
+  lead (criado/atualizado pelo telefone, com o campo `quantidade_de_participantes_ultimo`).
 
-**No ar:** https://nacional-kart-agenda.vercel.app
+Stack: Next.js 16 (App Router) · shadcn/ui · Supabase · Vercel.
 
-> ⚠️ **A página não tem autenticação.** Quem tiver o link entra e mexe na agenda. Hoje o risco
-> é baixo porque o modo local guarda os dados no navegador de cada visitante — não há agenda
-> compartilhada para vazar. **Isso deixa de ser verdade no minuto em que o backend entrar:**
-> a mesma URL pública passaria a ler e gravar a agenda real do cliente. Login é pré-requisito
-> para ligar a API, não um item de melhoria.
+## Rodando
 
-## O modelo
+```bash
+pnpm install
+cp .env.example .env.local   # e preencha
+pnpm dev
+```
 
-A grade de baterias **não é uma lista fixa** — ela é gerada a partir da configuração de cada
-unidade (abertura, fechamento, duração da bateria, intervalo, karts por bateria). Mudar a
-capacidade de 10 para 12 karts recalcula a grade inteira.
-
-Cada agendamento consome N karts de uma bateria. O **encaixe** é achar bateria com vagas ≥ N.
-Agendamentos com status `cancelado` ou `noshow` não ocupam kart.
-
-## Telas
-
-| Tela | Para quê |
+| Variável | O que é |
 |---|---|
-| **Grade do dia** | Visão da atendente: um card por bateria, ocupação, vagas, verde/âmbar/vermelho |
-| **Encaixe** | "Chegaram 4 pessoas" → em quais baterias cabem, com marcação de encaixe exato e opção de dividir o grupo |
-| **Agendamentos** | Lista com busca, filtro por status/período e export CSV |
-| **Configuração** | Horários, duração, capacidade, preço, dias de funcionamento, unidades |
-| **API / Sellflux** | Modo de armazenamento e o contrato de integração |
+| `SELLFLUX_TOKEN` | Chave de API do projeto Sellflux. Só é lida no servidor. |
+| `APP_PASSWORD` | Senha compartilhada das atendentes (tela de login). |
+| `SESSION_SECRET` | String aleatória longa que assina o cookie de sessão (`openssl rand -hex 32`). |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Projeto Supabase com a tabela `nk_unidades`. Service role, só no servidor. |
 
-## Modos de armazenamento
+Primeiro acesso: entre em **Configuração** e ligue cada unidade ao seu usuário "Recepção" da Sellflux;
+ajuste capacidade (karts por bateria) e horários por dia da semana.
 
-Toda a persistência passa por `Store.*`, que tem dois modos. A interface não sabe qual está ativo.
-
-- **`local`** — `localStorage`, roda sem servidor. Serve para validar o fluxo.
-  Limitação: os dados ficam no navegador de cada atendente, não são compartilhados.
-- **`api`** — REST. É o modo de produção, e o único em que o Sellflux consegue agendar.
-
-## Contrato da API (a implementar no backend)
-
-Autenticação em todas as chamadas: `Authorization: Bearer <token>`.
-Respostas em JSON. Fuso: `America/Sao_Paulo`.
-
-| Verbo | Rota | O que faz |
-|---|---|---|
-| `GET` | `/disponibilidade?data=&pessoas=&unidade=` | Baterias com vaga |
-| `POST` | `/agendamentos` | Cria — **é o que o Sellflux chama** |
-| `GET` | `/agendamentos?data=&unidade=` | Lista do dia |
-| `PATCH` | `/agendamentos/{id}` | Altera / muda status |
-| `DELETE` | `/agendamentos/{id}` | Remove |
-| `GET` | `/config?unidade=` | Grade e capacidade |
-
-### POST /agendamentos
-
-```json
-{
-  "nome": "{{lead.name}}",
-  "telefone": "{{lead.phone}}",
-  "email": "{{lead.email}}",
-  "pessoas": 2,
-  "data": "2026-07-20",
-  "bateria": "19:00",
-  "unidade": "goiania",
-  "origem": "sellflux",
-  "external_id": "{{lead.id}}",
-  "observacoes": "{{lead.notes}}"
-}
+```bash
+pnpm test        # parse/slots/tz
+pnpm typecheck
+pnpm lint
 ```
 
-`bateria` vazio ou omitido ativa o **encaixe automático**: a API escolhe a primeira bateria do
-dia com vaga para o grupo inteiro e devolve qual foi. `external_id` evita duplicar o mesmo lead.
+## Como funciona
 
-**201 — agendou**
+```
+tela /agenda ──> GET /api/agenda?unidade&data ──> Sellflux GET /crm/schedules (usuário da unidade)
+                                                  + nk_unidades (capacidade, grade)
+                                                  = slots de 30 min com ocupação e vagas
 
-```json
-{ "id": "ag_9f3a21", "status": "confirmado", "data": "2026-07-20",
-  "bateria": "19:00", "pessoas": 2, "vagas_restantes": 6 }
+Nova reserva ──> POST /api/agenda ──> recalcula vagas no servidor
+                                      ├─ 409 lotado (+ alternativas com vaga)
+                                      ├─ lead: busca por telefone → cria ou atualiza
+                                      └─ POST /crm/schedules (subject "Nome Np", description padrão)
+Editar ──────> PUT /api/agenda/:id     (re-checa vaga ignorando a própria reserva)
+Cancelar ────> DELETE /api/agenda/:id  (PUT status=2; fallback: prefixo "CANCELADO - ")
 ```
 
-**409 — bateria lotada**, já devolvendo alternativas para o Sellflux reofertar:
+- Ocupação de um slot = soma das pessoas dos agendamentos ativos que começam nele. A quantidade vem do
+  título (`9p`) ou da linha "Quantidade de participantes" da descrição. Agendamento fora do padrão
+  (criado à mão na Sellflux) conta como **1** e aparece com aviso.
+- Agendamentos canceladas não ocupam e aparecem riscados.
+- O token da Sellflux e a service role do Supabase nunca chegam ao browser: só os route handlers os leem.
+- Cookie de sessão HMAC (`proxy.ts` bloqueia tudo sem ele; APIs devolvem 401).
 
-```json
-{ "erro": "bateria_lotada",
-  "mensagem": "A bateria 19:00 tem 1 vaga e foram pedidas 2.",
-  "alternativas": [ { "bateria": "19:20", "vagas": 8 }, { "bateria": "19:40", "vagas": 10 } ] }
+Referência da API Sellflux: [SELLFLUX-API.md](SELLFLUX-API.md). Versão anterior (HTML único, sem
+backend): `legacy/agenda-nacional-kart.html`.
+
+## Estrutura
+
 ```
-
-## Integração Sellflux
-
-Especificação completa em [SELLFLUX-API.md](SELLFLUX-API.md), levantada da documentação
-oficial. O resumo que decide a arquitetura:
-
-**A Sellflux tem agenda (`/api/v1/crm/schedules`), mas não tem capacidade.** É um calendário
-de compromissos — nenhum campo de vaga ou recurso limitado. Ela não sabe que uma bateria tem
-10 karts. Por isso **a grade, a capacidade e o encaixe continuam sendo desta agenda**, que é
-a fonte de verdade; a Sellflux é a camada de CRM e comunicação.
-
-Ao criar/alterar uma reserva, o painel espelha na Sellflux em quatro passos:
-
-1. `GET /api/v1/lead/project?search=<telefone>` — acha o lead (evita duplicar)
-2. `POST /api/v1/lead` — cria se não achou, com `unidade`/`bateria`/`pessoas` como campos personalizados
-3. `POST /api/v1/crm/schedules` — o compromisso da bateria, vinculado ao lead
-4. `POST /automation/v1/whatsapp/lead` — confirmação via template (opcional)
-
-O espelhamento é assíncrono e **não bloqueia a atendente**: se a Sellflux falhar, a reserva
-local continua válida e o erro fica marcado no registro (`sellflux_erro`).
-
-### Pré-requisitos no projeto Sellflux
-
-- **Campos personalizados** `unidade`, `bateria` e `pessoas` criados — senão a Sellflux
-  ignora as chaves **em silêncio**, sem erro, e o dado não aparece no lead.
-- Um **`acting_user_id`** válido (`GET /api/v1/crm/team/users`) — obrigatório nas rotas de
-  CRM quando a auth é por chave de API.
-- Um **template de WhatsApp**, se quiser a confirmação automática.
-
-### Por que existe um proxy
-
-A chave da Sellflux dá acesso ao CRM inteiro do projeto. No browser ela seria legível por
-qualquer pessoa que abrisse a agenda, e a chamada direta bate em CORS de qualquer jeito.
-Então o painel aponta para um **proxy** — uma rota da nossa API que guarda a chave, espelha
-os mesmos paths da Sellflux e injeta o `Authorization`.
-
-## Estado atual
-
-O backend **ainda não existe** — hoje só o modo local funciona, e sem o proxy o espelhamento
-na Sellflux fica desligado. Próximo passo: subir no Supabase (Postgres + Edge Functions) a
-API do contrato acima **e** o proxy da Sellflux.
-
-Depois disso vale montar na Sellflux uma automação com `domain_type: "schedule"` (disparada
-por agendamento) para lembrete de bateria e follow-up de no-show — sem precisarmos agendar
-nada do nosso lado.
-
-Os valores de configuração hoje são um chute de partida e precisam ser confirmados com o
-cliente: 10h–22h, baterias de 20min com 10min de intervalo, 10 karts, R$ 60 por piloto.
-
-## Debug
-
-O console expõe `NK.DB`, `NK.Store`, `NK.baterias(unidade, data)` e `NK.seed()`.
+app/agenda            grade do dia, filtro "quantas pessoas?", nova reserva, editar/cancelar
+app/configuracao      capacidade, duração, horários e usuário Sellflux por unidade
+app/api/agenda        GET grade · POST cria · PUT/DELETE em [id]
+app/api/config        GET/PUT nk_unidades
+app/api/sellflux/users lista usuários para o mapeamento
+lib/agenda.ts         regras (vaga, 409, lead, textos)
+lib/sellflux.ts       cliente da API pública (normaliza os shapes de /crm/*)
+lib/db.ts             único ponto de acesso ao banco
+lib/slots.ts          grade e ocupação   ·   lib/parse.ts  título/descrição/telefone   ·   lib/tz.ts  fuso
+supabase/migrations   SQL da tabela nk_unidades
+```

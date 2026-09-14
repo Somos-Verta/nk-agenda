@@ -135,3 +135,81 @@ lembrete de bateria e follow-up de no-show, sem a gente precisar agendar nada do
 3. **Campos personalizados** precisam ser criados no projeto Sellflux antes de serem enviados.
 4. **`acting_user_id`** obrigatório nas rotas de CRM com chave de API.
 5. `PUT /api/v1/lead` com id no body foge do padrão REST das outras rotas.
+
+---
+
+## Descobertas com o token real (14/09/2026, projeto 36486)
+
+Nada disto está na doc. Verificado por chamadas reais.
+
+### Chave de API (`permission: "api"`)
+
+- ✅ `/api/v1/lead/*` funciona direto.
+- ✅ `/api/v1/crm/schedules` funciona **só com `acting_user_id` de um usuário com permissão de CRM**
+  (Administrador). Usuários "Recepção" (permissão 2) e outros dão
+  `"acting_user_id não tem permissão para esta ação no projeto"`.
+  → O app usa `SELLFLUX_ACTING_USER_ID` (admin) nas chamadas e coloca o usuário da unidade em
+  `participant_user_ids`, que é o que faz o compromisso aparecer na agenda dele.
+- ❌ `/api/v1/crm/team/users`, `/api/v1/team/project`, `/api/v1/project`, `/flux-v2/aux/team-users`:
+  `"Chave não encontrada"` — a chave não tem escopo de equipe. Os ids dos usuários foram obtidos pela UI
+  (Equipe) e ficam em `nk_unidades.sellflux_user_id`.
+
+### GET /api/v1/crm/schedules — shape real
+
+```json
+{ "data": [ {
+    "id": 200000001, "subject": "Beltrana Silva 2p ❌",
+    "description": "🏎️ Reservado por: ...\n📆 Data: 20/12\n⏱ Horário: 16h\n📲 Telefone: ...\n🙋‍♂️ Quantidade de participantes: 2",
+    "status": 1, "start_date": "2026-12-20T19:00:00.000Z", "end_date": "2026-12-20T19:30:00.000Z",
+    "timezone": "America/Sao_Paulo", "schedule_type": 1,
+    "lead_id": null, "lead_ids": [100000001],
+    "users": [56445, 56938], "action_user_id": 56938,
+    "task_completed": false, "priority": 1, "created_at": "...", "updated_at": "..."
+} ], "total": 4439, "page": 1, "limit": 3, "total_pages": 1480 }
+```
+
+- `start_date`/`end_date` em **UTC** (16h de Brasília = `19:00Z`).
+- `users` = participantes (ids de usuário). A agenda de uma unidade = itens cujo `users` contém o
+  usuário "Recepção" dela.
+- **`start_date`/`end_date` como filtro são ignorados** — testado com ISO, `YYYY-MM-DD`, `DD/MM/YYYY`,
+  `startDate`, `from/to`, `date`… todos devolvem os 4.439. `search` filtra texto em subject/description.
+- A lista vem **ordenada por `start_date` desc** (verificado em 1.000 itens) e `limit` aceita até 5.000.
+  → O app pagina (300 por página) e para quando passa do dia pedido; para hoje é 1 requisição, porque só
+  os agendamentos futuros (~100) vêm antes.
+- `only_my_participation=true` filtra pelo `acting_user_id` (não pelo participante desejado).
+
+### Convenções já usadas pela equipe nos títulos
+
+`"joao 12p"`, `"MARIA 1P"`, `"Sicrano 17 pessoas"`, `"Beltrana Silva 2p ❌"` (❌ = cancelado).
+O parser aceita `Np`, `NP`, `N pessoas` em qualquer posição e trata ❌ ou "CANCELADO" como cancelado.
+Descrições variam muito; a linha `Quantidade de participantes: N` é o fallback.
+
+### Status do agendamento: `meeting_outcome` (o que a UI mostra) vs. `status` (testado 14/09/2026)
+
+O status que a UI da Sellflux exibe ("Agendado", "Cancelado"…) é o campo **`meeting_outcome`**:
+
+| `meeting_outcome` | UI | No app |
+|---|---|---|
+| `scheduled` | Agendado | `agendado` — ocupa kart |
+| `rescheduled` | Reagendado | `reagendado` — ocupa kart (decisão do cliente, 14/09) |
+| `completed` | Concluído | `concluido` — ocupa kart (é passado) |
+| `canceled` | Cancelado | `cancelado` — **não ocupa** |
+| `no_show` (presumido) | Não compareceu | `nao_compareceu` |
+
+- **Só vem em `GET /crm/schedules/:id`** — a listagem não traz o campo. O app busca o detalhe de cada
+  agendamento do dia (6 em paralelo; com 120 simultâneos metade das chamadas falha).
+- **Não é gravável pela API pública**: `PUT` com `meeting_outcome`/`outcome`/`result` → "Nenhum campo
+  para atualizar". Cancelar pela API = só dá para marcar ❌ no título (convenção da equipe, que também
+  marca "Cancelado" na UI — os três ❌ da amostra estavam `canceled`).
+- Outros campos que só aparecem no `GET /:id`: `platform_event_data.status` ("confirmed"),
+  `conclusion_note`, `organizator_id`, `send_notification`, `work_schedule_id` (null nos exemplos).
+
+E o campo `status` numérico:
+
+| `status` | API | UI |
+|---|---|---|
+| `1` | padrão (4.440 de 4.441) | — |
+| `2` | `PUT` aceita; some do filtro `status=1` | **não muda nada** (continua "Agendado") |
+| `3` | `PUT` aceita — e o agendamento **some** de tudo (`GET /:id` → "não encontrado") = remoção lógica |
+
+`task_completed` não é editável. `?status=` vazio devolve 0 itens — omitir o parâmetro.
