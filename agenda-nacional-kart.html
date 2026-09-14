@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agenda — Nacional Kart</title>
+<style>
+  :root{
+    --ink:#0F1115;
+    --ink-2:#2B303B;
+    --muted:#6B7280;
+    --line:#E5E7EB;
+    --bg:#F4F5F7;
+    --surface:#FFFFFF;
+    --red:#E10600;
+    --red-dark:#B00500;
+    --green:#0E9F6E;
+    --green-bg:#E7F7F1;
+    --amber:#D97706;
+    --amber-bg:#FEF3E2;
+    --danger:#DC2626;
+    --danger-bg:#FEE9E9;
+    --blue:#2563EB;
+    --blue-bg:#E8F0FE;
+    --radius:12px;
+    --shadow:0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.1);
+    --shadow-lg:0 10px 30px rgba(16,24,40,.12);
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;font-size:15px;line-height:1.45}
+  button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+  button{cursor:pointer;border:none;background:none}
+  a{color:var(--blue)}
+
+  /* ---------- Layout ---------- */
+  .topbar{background:var(--ink);color:#fff;padding:0 20px;display:flex;align-items:center;gap:20px;height:60px;position:sticky;top:0;z-index:40}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;font-size:17px;white-space:nowrap}
+  .brand .flag{width:22px;height:22px;border-radius:4px;background:
+      conic-gradient(#fff 0 25%, var(--ink) 0 50%, #fff 0 75%, var(--ink) 0);
+      background-size:11px 11px;box-shadow:0 0 0 2px var(--red)}
+  .tabs{display:flex;gap:2px;margin-left:8px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{padding:8px 14px;border-radius:8px;color:#9CA3AF;font-weight:600;font-size:14px;transition:.15s;white-space:nowrap;flex-shrink:0}
+  .tab:hover{color:#fff;background:rgba(255,255,255,.08)}
+  .tab.active{color:#fff;background:var(--red)}
+  .topbar .unit{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:#fff;padding:7px 10px;border-radius:8px;font-weight:600;font-size:13px}
+  .topbar .unit option{color:var(--ink)}
+
+  .wrap{max-width:1400px;margin:0 auto;padding:20px}
+  .page{display:none}
+  .page.active{display:block}
+
+  /* ---------- Date bar ---------- */
+  .datebar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+  .datenav{display:flex;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);overflow:hidden}
+  .datenav button{padding:9px 12px;color:var(--muted);font-weight:700}
+  .datenav button:hover{background:var(--bg);color:var(--ink)}
+  .datenav input{border:none;padding:9px 10px;font-weight:700;background:transparent;text-align:center}
+  .datelabel{font-size:22px;font-weight:800;letter-spacing:-.02em;text-transform:capitalize}
+  .datelabel small{display:block;font-size:13px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0}
+  .spacer{flex:1}
+
+  /* ---------- Buttons ---------- */
+  .btn{padding:9px 16px;border-radius:9px;font-weight:700;font-size:14px;border:1px solid transparent;display:inline-flex;align-items:center;gap:7px;transition:.15s;white-space:nowrap}
+  .btn-primary{background:var(--red);color:#fff}
+  .btn-primary:hover{background:var(--red-dark)}
+  .btn-dark{background:var(--ink);color:#fff}
+  .btn-dark:hover{background:var(--ink-2)}
+  .btn-ghost{background:var(--surface);border-color:var(--line);color:var(--ink-2);box-shadow:var(--shadow)}
+  .btn-ghost:hover{border-color:var(--muted)}
+  .btn-sm{padding:6px 11px;font-size:13px;border-radius:7px}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+
+  /* ---------- KPI strip ---------- */
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+  .kpi .lbl{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+  .kpi .val{font-size:26px;font-weight:800;letter-spacing:-.03em;margin-top:2px}
+  .kpi .sub{font-size:12px;color:var(--muted);font-weight:600}
+
+  /* ---------- Bateria grid ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:14px}
+  .bat{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--green);border-radius:var(--radius);box-shadow:var(--shadow);display:flex;flex-direction:column;transition:.15s}
+  .bat:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px)}
+  .bat.s-filling{border-left-color:var(--amber)}
+  .bat.s-full{border-left-color:var(--danger)}
+  .bat.s-past{opacity:.5}
+  .bat.hl{outline:3px solid var(--blue);outline-offset:1px}
+  .bat-head{padding:13px 14px 11px;display:flex;align-items:flex-start;gap:10px;border-bottom:1px solid var(--line)}
+  .bat-time{font-size:21px;font-weight:800;letter-spacing:-.03em;line-height:1.1}
+  .bat-time small{display:block;font-size:11.5px;font-weight:600;color:var(--muted);letter-spacing:0}
+  .pill{padding:3px 9px;border-radius:99px;font-size:11.5px;font-weight:800;white-space:nowrap}
+  .pill.free{background:var(--green-bg);color:var(--green)}
+  .pill.filling{background:var(--amber-bg);color:var(--amber)}
+  .pill.full{background:var(--danger-bg);color:var(--danger)}
+  .bar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:9px}
+  .bar i{display:block;height:100%;background:var(--green);border-radius:99px;transition:width .3s}
+  .s-filling .bar i{background:var(--amber)}
+  .s-full .bar i{background:var(--danger)}
+  .bat-body{padding:10px 14px;flex:1;display:flex;flex-direction:column;gap:6px;min-height:52px}
+  .empty-slot{color:var(--muted);font-size:13px;font-style:italic;padding:6px 0}
+  .book{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:var(--bg);font-size:13.5px;transition:.12s}
+  .book:hover{background:#EDEFF3}
+  .book .qty{background:var(--ink);color:#fff;width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font-weight:800;font-size:11.5px;flex-shrink:0}
+  .book .nm{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .book .src{width:6px;height:6px;border-radius:99px;background:var(--blue);flex-shrink:0}
+  .book.st-pendente{opacity:.75}
+  .book.st-pendente .qty{background:var(--amber)}
+  .book.st-compareceu .qty{background:var(--green)}
+  .book.st-noshow{opacity:.5;text-decoration:line-through}
+  .book.st-noshow .qty{background:var(--muted)}
+  .bat-foot{padding:9px 14px;border-top:1px solid var(--line)}
+  .bat-foot .btn{width:100%;justify-content:center}
+
+  /* ---------- Encaixe ---------- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);margin-bottom:18px}
+  .panel h2{font-size:17px;font-weight:800;letter-spacing:-.02em;margin-bottom:3px}
+  .panel .hint{font-size:13.5px;color:var(--muted);margin-bottom:14px}
+  .fitform{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+  .field{display:flex;flex-direction:column;gap:5px}
+  .field label{font-size:12px;font-weight:700;color:var(--ink-2);text-transform:uppercase;letter-spacing:.04em}
+  .field input,.field select,.field textarea{padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font-weight:500;transition:.15s}
+  .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(15,17,21,.07)}
+  .stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+  .stepper button{width:38px;height:38px;font-size:19px;font-weight:700;color:var(--muted)}
+  .stepper button:hover{background:var(--bg);color:var(--ink)}
+  .stepper input{width:56px;border:none;text-align:center;font-weight:800;font-size:17px;padding:9px 0}
+  .stepper input:focus{outline:none}
+
+  .fitres{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:16px}
+  .fit{border:1px solid var(--line);border-radius:10px;padding:12px 13px;background:var(--surface);text-align:left;transition:.15s;position:relative}
+  .fit:hover{border-color:var(--ink);box-shadow:var(--shadow-lg)}
+  .fit .t{font-size:19px;font-weight:800;letter-spacing:-.02em}
+  .fit .d{font-size:13px;color:var(--muted);font-weight:600;margin-top:1px}
+  .fit .tag{position:absolute;top:11px;right:11px;font-size:10.5px;font-weight:800;padding:3px 7px;border-radius:99px;text-transform:uppercase;letter-spacing:.04em}
+  .fit.perfect{border-color:var(--green);background:var(--green-bg)}
+  .fit.perfect .tag{background:var(--green);color:#fff}
+  .fit.split{border-style:dashed}
+  .nores{padding:26px;text-align:center;color:var(--muted);font-size:14px;background:var(--bg);border-radius:10px;margin-top:16px}
+
+  /* ---------- Table ---------- */
+  .toolbar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+  .search{flex:1;min-width:200px;position:relative}
+  .search input{width:100%;padding:9px 12px 9px 34px;border:1px solid var(--line);border-radius:9px;background:var(--surface);box-shadow:var(--shadow)}
+  .search input:focus{outline:none;border-color:var(--ink)}
+  .search .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px}
+  table{width:100%;border-collapse:collapse;background:var(--surface);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--line)}
+  th{text-align:left;padding:11px 14px;font-size:11.5px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;background:var(--bg);border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:11px 14px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#FAFBFC}
+  .badge{padding:3px 9px;border-radius:99px;font-size:11.5px;font-weight:800;display:inline-block;white-space:nowrap}
+  .b-confirmado{background:var(--green-bg);color:var(--green)}
+  .b-pendente{background:var(--amber-bg);color:var(--amber)}
+  .b-compareceu{background:var(--blue-bg);color:var(--blue)}
+  .b-noshow{background:var(--danger-bg);color:var(--danger)}
+  .b-cancelado{background:var(--bg);color:var(--muted)}
+  .src-tag{font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .src-tag.api{color:var(--blue)}
+  .rowact{display:flex;gap:5px}
+  .iconbtn{width:29px;height:29px;border-radius:7px;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line);font-size:13px}
+  .iconbtn:hover{background:var(--bg);color:var(--ink);border-color:var(--muted)}
+  .iconbtn.del:hover{background:var(--danger-bg);color:var(--danger);border-color:var(--danger)}
+
+  /* ---------- Modal ---------- */
+  .overlay{position:fixed;inset:0;background:rgba(15,17,21,.55);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:60;padding:20px}
+  .overlay.on{display:flex}
+  .modal{background:var(--surface);border-radius:16px;width:100%;max-width:540px;box-shadow:0 24px 60px rgba(0,0,0,.3);max-height:90vh;display:flex;flex-direction:column}
+  .modal-head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}
+  .modal-head h3{font-size:18px;font-weight:800;letter-spacing:-.02em}
+  .modal-head p{font-size:13px;color:var(--muted);font-weight:600;margin-top:1px}
+  .modal-body{padding:20px;overflow-y:auto;display:grid;gap:14px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modal-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;background:var(--bg);border-radius:0 0 16px 16px}
+  .close{width:32px;height:32px;border-radius:8px;color:var(--muted);font-size:20px;display:grid;place-items:center}
+  .close:hover{background:var(--bg);color:var(--ink)}
+  .capnote{font-size:12.5px;font-weight:700;padding:8px 11px;border-radius:8px;background:var(--green-bg);color:var(--green)}
+  .capnote.bad{background:var(--danger-bg);color:var(--danger)}
+
+  /* ---------- Config / API ---------- */
+  .cfggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px}
+  .code{background:var(--ink);color:#E5E7EB;padding:14px 16px;border-radius:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.6;overflow-x:auto;white-space:pre;position:relative}
+  .code .k{color:#7DD3FC}.code .s{color:#86EFAC}.code .c{color:#6B7280}.code .m{color:#FCA5A5;font-weight:700}
+  .copy{position:absolute;top:9px;right:9px;background:rgba(255,255,255,.1);color:#D1D5DB;padding:4px 9px;border-radius:6px;font-size:11px;font-weight:700}
+  .copy:hover{background:rgba(255,255,255,.2);color:#fff}
+  .ep{display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--line);border-radius:9px;margin-bottom:8px;font-size:13.5px;background:var(--surface)}
+  .verb{font-family:ui-monospace,monospace;font-size:11px;font-weight:800;padding:3px 7px;border-radius:5px;min-width:52px;text-align:center}
+  .v-post{background:var(--green-bg);color:var(--green)}
+  .v-get{background:var(--blue-bg);color:var(--blue)}
+  .v-patch{background:var(--amber-bg);color:var(--amber)}
+  .v-del{background:var(--danger-bg);color:var(--danger)}
+  .ep code{font-family:ui-monospace,monospace;font-weight:700;font-size:12.5px}
+  .ep span{color:var(--muted);font-size:12.5px}
+  .status{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;padding:5px 10px;border-radius:99px}
+  .status.ok{background:var(--green-bg);color:var(--green)}
+  .status.off{background:var(--bg);color:var(--muted)}
+  .status.err{background:var(--danger-bg);color:var(--danger)}
+  .status .dot{width:7px;height:7px;border-radius:99px;background:currentColor}
+  .note{font-size:13px;color:var(--muted);background:var(--bg);padding:11px 13px;border-radius:9px;border-left:3px solid var(--line)}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:#fff;padding:11px 20px;border-radius:10px;font-weight:700;font-size:14px;box-shadow:var(--shadow-lg);opacity:0;transition:.25s;z-index:80;pointer-events:none}
+  .toast.on{transform:translateX(-50%) translateY(0);opacity:1}
+  .sec-title{font-size:12px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:22px 0 10px}
+  @media(max-width:820px){
+    .tabs{overflow-x:auto}.datelabel{font-size:18px}.row2{grid-template-columns:1fr}
+    .topbar{gap:10px;padding:0 12px}.wrap{padding:14px}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand"><span class="flag"></span> Nacional Kart</div>
+  <nav class="tabs">
+    <button class="tab active" data-page="grade">Grade do dia</button>
+    <button class="tab" data-page="encaixe">Encaixe</button>
+    <button class="tab" data-page="lista">Agendamentos</button>
+    <button class="tab" data-page="config">Configuração</button>
+    <button class="tab" data-page="api">API / Sellflux</button>
+  </nav>
+  <select class="unit" id="unitSel"></select>
+</div>
+
+<div class="wrap">
+
+  <!-- ============ GRADE ============ -->
+  <section class="page active" id="page-grade">
+    <div class="datebar">
+      <div class="datenav">
+        <button id="dPrev">‹</button>
+        <input type="date" id="dInput">
+        <button id="dNext">›</button>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="dToday">Hoje</button>
+      <div class="datelabel" id="dLabel"></div>
+      <div class="spacer"></div>
+      <button class="btn btn-primary" id="newBtn">+ Novo agendamento</button>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <!-- ============ ENCAIXE ============ -->
+  <section class="page" id="page-encaixe">
+    <div class="panel">
+      <h2>Buscar encaixe</h2>
+      <p class="hint">Diga quantas pessoas chegaram e o sistema mostra em quais baterias elas cabem.</p>
+      <div class="fitform">
+        <div class="field">
+          <label>Pessoas</label>
+          <div class="stepper">
+            <button id="fMinus">−</button>
+            <input type="number" id="fQty" value="2" min="1">
+            <button id="fPlus">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Data</label>
+          <input type="date" id="fDate">
+        </div>
+        <div class="field">
+          <label>A partir de</label>
+          <input type="time" id="fFrom">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-dark" id="fGo">Buscar vagas</button>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-ghost" id="fAgora">Agora, hoje</button>
+        </div>
+      </div>
+      <div id="fitOut"></div>
+    </div>
+  </section>
+
+  <!-- ============ LISTA ============ -->
+  <section class="page" id="page-lista">
+    <div class="toolbar">
+      <div class="search"><span class="ic">⌕</span><input id="q" placeholder="Buscar por nome, telefone ou e-mail…"></div>
+      <select class="field" id="fltStatus" style="padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font-weight:600">
+        <option value="">Todos os status</option>
+        <option value="confirmado">Confirmado</option>
+        <option value="pendente">Pendente</option>
+        <option value="compareceu">Compareceu</option>
+        <option value="noshow">No-show</option>
+        <option value="cancelado">Cancelado</option>
+      </select>
+      <select class="field" id="fltRange" style="padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--surface);font-weight:600">
+        <option value="futuro">De hoje em diante</option>
+        <option value="hoje">Somente hoje</option>
+        <option value="passado">Passados</option>
+        <option value="todos">Todos</option>
+      </select>
+      <button class="btn btn-ghost" id="exportBtn">Exportar CSV</button>
+      <button class="btn btn-primary" id="newBtn2">+ Novo</button>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Data</th><th>Bateria</th><th>Cliente</th><th>Contato</th>
+        <th>Pessoas</th><th>Status</th><th>Origem</th><th></th>
+      </tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </section>
+
+  <!-- ============ CONFIG ============ -->
+  <section class="page" id="page-config">
+    <div class="panel">
+      <h2>Baterias e capacidade</h2>
+      <p class="hint">Define a grade de horários e quantos karts existem por bateria. Vale para a unidade selecionada no topo.</p>
+      <div class="cfggrid">
+        <div class="field"><label>Abertura</label><input type="time" id="cOpen"></div>
+        <div class="field"><label>Fechamento</label><input type="time" id="cClose"></div>
+        <div class="field"><label>Duração da bateria (min)</label><input type="number" id="cDur" min="1"></div>
+        <div class="field"><label>Intervalo entre baterias (min)</label><input type="number" id="cGap" min="0"></div>
+        <div class="field"><label>Karts por bateria</label><input type="number" id="cKarts" min="1"></div>
+        <div class="field"><label>Preço por piloto (R$)</label><input type="number" id="cPrice" min="0" step="0.01"></div>
+      </div>
+      <div class="sec-title">Dias de funcionamento</div>
+      <div id="cDays" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div style="margin-top:18px;display:flex;gap:10px">
+        <button class="btn btn-primary" id="cSave">Salvar configuração</button>
+        <button class="btn btn-ghost" id="cReset">Restaurar padrão</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Unidades</h2>
+      <p class="hint">Cada unidade tem sua própria grade de baterias e sua própria agenda.</p>
+      <div id="unitList"></div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <input class="field" id="newUnit" placeholder="Nome da nova unidade" style="padding:9px 11px;border:1px solid var(--line);border-radius:9px;flex:1;max-width:280px">
+        <button class="btn btn-dark" id="addUnit">Adicionar unidade</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Dados</h2>
+      <p class="hint">No modo local, tudo fica salvo neste navegador. Faça backup ou migre para a API quando o backend estiver no ar.</p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-ghost" id="dumpBtn">Baixar backup (JSON)</button>
+        <button class="btn btn-ghost" id="loadBtn">Restaurar backup</button>
+        <button class="btn btn-ghost" id="seedBtn">Gerar dados de exemplo</button>
+        <button class="btn btn-ghost" id="wipeBtn" style="color:var(--danger)">Apagar tudo</button>
+        <input type="file" id="fileIn" accept="application/json" hidden>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ API ============ -->
+  <section class="page" id="page-api">
+    <div class="panel">
+      <h2>Modo de armazenamento</h2>
+      <p class="hint">Em <b>Local</b> a agenda roda 100% neste navegador — funciona já, sem servidor. Em <b>API</b> ela lê e grava num backend, e aí o Sellflux consegue criar agendamentos sozinho.</p>
+      <div class="fitform">
+        <div class="field">
+          <label>Modo</label>
+          <select id="aMode" style="padding:9px 11px;border:1px solid var(--line);border-radius:9px;font-weight:600">
+            <option value="local">Local (navegador)</option>
+            <option value="api">API remota</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:260px">
+          <label>URL base da API</label>
+          <input id="aUrl" placeholder="https://api.nacionalkart.com.br/v1">
+        </div>
+        <div class="field" style="min-width:220px">
+          <label>Token (Bearer)</label>
+          <input id="aToken" placeholder="nk_live_…">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-dark" id="aTest">Testar conexão</button>
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" id="aSave">Salvar</button>
+        </div>
+      </div>
+      <div style="margin-top:12px"><span class="status off" id="aStatus"><span class="dot"></span> Modo local</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Contrato da API</h2>
+      <p class="hint">É isso que o backend precisa expor. O painel já fala exatamente esses endpoints — basta implementar do outro lado.</p>
+      <div class="ep"><span class="verb v-get">GET</span><code>/disponibilidade?data=2026-07-20&amp;pessoas=4&amp;unidade=goiania</code><span>— baterias com vaga</span></div>
+      <div class="ep"><span class="verb v-post">POST</span><code>/agendamentos</code><span>— cria (é o que o Sellflux chama)</span></div>
+      <div class="ep"><span class="verb v-get">GET</span><code>/agendamentos?data=2026-07-20&amp;unidade=goiania</code><span>— lista do dia</span></div>
+      <div class="ep"><span class="verb v-patch">PATCH</span><code>/agendamentos/{id}</code><span>— altera / muda status</span></div>
+      <div class="ep"><span class="verb v-del">DELETE</span><code>/agendamentos/{id}</code><span>— remove</span></div>
+      <div class="ep"><span class="verb v-get">GET</span><code>/config?unidade=goiania</code><span>— grade e capacidade</span></div>
+      <div class="note" style="margin-top:12px">Autenticação em todas as chamadas: cabeçalho <code>Authorization: Bearer &lt;token&gt;</code>. Respostas sempre JSON. Fuso: <code>America/Sao_Paulo</code>.</div>
+    </div>
+
+    <div class="panel" style="border-left:4px solid var(--amber)">
+      <h2>Sellflux — o que ela faz e o que ela não faz</h2>
+      <p class="hint">Levantado da documentação oficial em 16/07/2026. Detalhes em <code>SELLFLUX-API.md</code>.</p>
+      <div class="note" style="border-left-color:var(--amber);background:var(--amber-bg);color:#7C4A03">
+        <b>A Sellflux tem agenda, mas não tem capacidade.</b> O recurso <code>/api/v1/crm/schedules</code>
+        é um calendário de compromissos — não existe campo de vaga, lotação ou recurso limitado.
+        Ela não sabe que uma bateria tem 10 karts e não recusaria o 11º piloto.
+        <b>Por isso a grade, a capacidade e o encaixe continuam sendo desta agenda</b>, que é a
+        fonte de verdade. A Sellflux entra como CRM e comunicação: lead, histórico e WhatsApp.
+      </div>
+      <div class="sec-title">O que usamos da API dela</div>
+      <div class="ep"><span class="verb v-post">POST</span><code>/api/v1/lead</code><span>— acha ou cria o cliente como lead</span></div>
+      <div class="ep"><span class="verb v-get">GET</span><code>/api/v1/lead/project?search=</code><span>— busca por nome, e-mail ou telefone (evita lead duplicado)</span></div>
+      <div class="ep"><span class="verb v-post">POST</span><code>/api/v1/crm/schedules</code><span>— cria o compromisso da bateria vinculado ao lead</span></div>
+      <div class="ep"><span class="verb v-patch">PUT</span><code>/api/v1/crm/schedules/{id}</code><span>— reflete alteração da reserva</span></div>
+      <div class="ep"><span class="verb v-post">POST</span><code>/automation/v1/whatsapp/lead</code><span>— confirmação por WhatsApp via template</span></div>
+      <div class="ep"><span class="verb v-get">GET</span><code>/api/v1/crm/team/users</code><span>— descobre o acting_user_id</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Conexão com a Sellflux</h2>
+      <p class="hint">Ao criar ou alterar uma reserva aqui, ela é espelhada na Sellflux: acha/cria o lead, cria o compromisso e dispara a confirmação.</p>
+      <div class="note" style="border-left-color:var(--danger);background:var(--danger-bg);color:#8B1A1A;margin-bottom:14px">
+        <b>A chave da Sellflux não pode ficar nesta página.</b> Ela dá acesso ao CRM inteiro do
+        projeto, e qualquer pessoa que abrir a agenda leria a chave. O navegador também barra a
+        chamada direta por CORS. Por isso o campo abaixo é o <b>proxy</b>: a rota da nossa API que
+        guarda a chave e repassa para a Sellflux espelhando os mesmos paths.
+      </div>
+      <div class="fitform">
+        <div class="field" style="flex:1;min-width:280px">
+          <label>URL do proxy (nossa API)</label>
+          <input id="sfProxy" placeholder="https://api.nacionalkart.com.br/sellflux">
+        </div>
+        <div class="field" style="min-width:160px">
+          <label>acting_user_id</label>
+          <input id="sfUser" placeholder="ex.: 316372">
+        </div>
+        <div class="field">
+          <label>&nbsp;</label>
+          <button class="btn btn-ghost" id="sfUsers">Buscar usuários</button>
+        </div>
+        <div class="field" style="min-width:150px">
+          <label>Template WhatsApp</label>
+          <input id="sfTpl" placeholder="ID (opcional)">
+        </div>
+        <div class="field" style="min-width:170px">
+          <label>Tags do lead</label>
+          <input id="sfTags" placeholder="kart,agendamento">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:7px;font-weight:700;font-size:14px;cursor:pointer">
+          <input type="checkbox" id="sfAtivo" style="width:16px;height:16px"> Espelhar reservas na Sellflux
+        </label>
+        <button class="btn btn-dark" id="sfTest">Testar conexão</button>
+        <button class="btn btn-primary" id="sfSave">Salvar</button>
+        <span class="status off" id="sfStatus"><span class="dot"></span> Desligado</span>
+      </div>
+      <div class="note" style="margin-top:12px"><b>acting_user_id é obrigatório</b> nas rotas de CRM quando a autenticação é por chave de API — sem ele, a Sellflux recusa o compromisso.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Como a bateria vira compromisso</h2>
+      <p class="hint">O mapeamento que o painel faz. <code>schedule_type</code> só aceita <code>meeting</code>, <code>call</code>, <code>task</code> ou <code>email</code> — não existe tipo de reserva, então bateria vira <code>meeting</code>.</p>
+      <div class="code" id="code1"><button class="copy" data-copy="code1">copiar</button><span class="m">POST</span> {proxy}<span class="k">/api/v1/crm/schedules</span>
+<span class="k">Content-Type</span>: application/json
+<span class="c">// o proxy injeta o Authorization: Bearer &lt;chave&gt;</span>
+
+{
+  <span class="k">"subject"</span>:        <span class="s">"Kart · João Silva · 4 pilotos · Goiânia"</span>,
+  <span class="k">"description"</span>:    <span class="s">"Bateria 19:00 na unidade Goiânia\n4 karts · origem: sellflux"</span>,
+  <span class="k">"start_date"</span>:     <span class="s">"2026-07-20T19:00:00-03:00"</span>,
+  <span class="k">"end_date"</span>:       <span class="s">"2026-07-20T19:20:00-03:00"</span>,  <span class="c">// início + duração da bateria</span>
+  <span class="k">"timezone"</span>:       <span class="s">"America/Sao_Paulo"</span>,
+  <span class="k">"schedule_type"</span>:  <span class="s">"meeting"</span>,
+  <span class="k">"lead_ids"</span>:       <span class="s">"100025"</span>,                <span class="c">// separados por vírgula</span>
+  <span class="k">"acting_user_id"</span>: <span class="s">316372</span>                  <span class="c">// obrigatório com chave de API</span>
+}</div>
+
+      <div class="sec-title">Antes disso: achar ou criar o lead</div>
+      <div class="code" id="code2"><button class="copy" data-copy="code2">copiar</button><span class="c">// 1) busca casa por nome, e-mail OU telefone — evita lead duplicado</span>
+<span class="m">GET</span> {proxy}<span class="k">/api/v1/lead/project?page=1&amp;search=</span>5562999998888
+
+<span class="c">// 2) só cria se não achou → 201 { "id": 100025 }</span>
+<span class="m">POST</span> {proxy}<span class="k">/api/v1/lead</span>
+{
+  <span class="k">"name"</span>:    <span class="s">"João Silva"</span>,
+  <span class="k">"phone"</span>:   <span class="s">"5562999998888"</span>,
+  <span class="k">"email"</span>:   <span class="s">"joao@email.com"</span>,
+  <span class="k">"tags"</span>:    [<span class="s">"kart"</span>, <span class="s">"agendamento"</span>],
+  <span class="k">"unidade"</span>: <span class="s">"Goiânia"</span>,      <span class="c">// ↓ campos personalizados</span>
+  <span class="k">"bateria"</span>: <span class="s">"19:00"</span>,
+  <span class="k">"pessoas"</span>: <span class="s">4</span>
+}</div>
+      <div class="note" style="margin-top:12px"><b>Atenção aos campos personalizados:</b> <code>unidade</code>, <code>bateria</code> e <code>pessoas</code> só são gravados se já existirem como campo personalizado no projeto Sellflux. Se não existirem, a Sellflux <b>ignora em silêncio</b> — não dá erro, o dado simplesmente não aparece no lead. Crie os três antes de ligar o espelhamento.</div>
+
+      <div class="sec-title">Depois: confirmação no WhatsApp</div>
+      <div class="code" id="code3"><button class="copy" data-copy="code3">copiar</button><span class="m">POST</span> {proxy}<span class="k">/automation/v1/whatsapp/lead</span>
+{
+  <span class="k">"lead_id"</span>:     <span class="s">100025</span>,
+  <span class="k">"template_id"</span>: <span class="s">1</span>,
+  <span class="k">"data"</span>: {                        <span class="c">// variáveis do template</span>
+    <span class="k">"nome"</span>:    <span class="s">"João Silva"</span>,
+    <span class="k">"bateria"</span>: <span class="s">"19:00"</span>,
+    <span class="k">"data"</span>:    <span class="s">"2026-07-20"</span>,
+    <span class="k">"unidade"</span>: <span class="s">"Goiânia"</span>,
+    <span class="k">"pessoas"</span>: <span class="s">"4"</span>
+  }
+}</div>
+      <div class="note" style="margin-top:12px">Vai para o telefone primário do lead. Se a confirmação falhar, a reserva local continua válida — o painel só marca o erro, sem desfazer nada.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Sellflux → Agenda (o caminho de volta)</h2>
+      <p class="hint">Para a Sellflux criar reserva sozinha, ela precisa chamar a nossa API — porque só ela sabe se a bateria tem vaga. É o <code>POST /agendamentos</code> do contrato acima, chamado por uma automação Flux v2.</p>
+      <div class="note">Na Sellflux, uma automação com <code>domain_type: "schedule"</code> é disparada por agendamento — é o gancho pronto para <b>lembrete de bateria</b> e <b>follow-up de no-show</b>, sem precisarmos agendar nada do nosso lado. Vale montar depois que o backend estiver no ar.</div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ MODAL ============ -->
+<div class="overlay" id="ov">
+  <div class="modal">
+    <div class="modal-head">
+      <div><h3 id="mTitle">Novo agendamento</h3><p id="mSub"></p></div>
+      <button class="close" id="mClose">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field"><label>Nome do cliente *</label><input id="mNome" placeholder="Ex.: João Silva"></div>
+      <div class="row2">
+        <div class="field"><label>Telefone / WhatsApp</label><input id="mTel" placeholder="(62) 99999-8888"></div>
+        <div class="field"><label>E-mail</label><input id="mEmail" placeholder="joao@email.com"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Data *</label><input type="date" id="mData"></div>
+        <div class="field"><label>Pessoas (karts) *</label>
+          <div class="stepper"><button id="mMinus">−</button><input type="number" id="mQty" value="1" min="1"><button id="mPlus">+</button></div>
+        </div>
+      </div>
+      <div class="field"><label>Bateria *</label><select id="mBat"></select></div>
+      <div id="mCap"></div>
+      <div class="row2">
+        <div class="field"><label>Status</label>
+          <select id="mStatus">
+            <option value="confirmado">Confirmado</option>
+            <option value="pendente">Pendente</option>
+            <option value="compareceu">Compareceu</option>
+            <option value="noshow">No-show</option>
+            <option value="cancelado">Cancelado</option>
+          </select>
+        </div>
+        <div class="field"><label>Origem</label>
+          <select id="mOrigem"><option value="balcao">Balcão</option><option value="telefone">Telefone</option><option value="whatsapp">WhatsApp</option><option value="sellflux">Sellflux</option><option value="site">Site</option></select>
+        </div>
+      </div>
+      <div class="field"><label>Observações</label><textarea id="mObs" rows="2" placeholder="Aniversário, grupo de empresa, precisa de kart infantil…"></textarea></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="mCancel">Cancelar</button>
+      <button class="btn btn-primary" id="mSave">Salvar agendamento</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+   AGENDA NACIONAL KART
+   Arquivo único. Roda em modo LOCAL (localStorage) ou API (backend REST).
+   Toda a persistência passa por Store.* — trocar de modo não mexe na UI.
+   ========================================================================= */
+
+const LS = 'nk_agenda_v1';
+const DIAS = ['dom','seg','ter','qua','qui','sex','sáb'];
+const DIAS_FULL = ['domingo','segunda-feira','terça-feira','quarta-feira','quinta-feira','sexta-feira','sábado'];
+const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+
+const PADRAO_CFG = { open:'10:00', close:'22:00', dur:20, gap:10, karts:10, price:60, days:[0,1,2,3,4,5,6] };
+
+let DB = {
+  unidades: [
+    { id:'goiania', nome:'Goiânia', cfg:{...PADRAO_CFG} },
+    { id:'saopaulo', nome:'São Paulo', cfg:{...PADRAO_CFG} }
+  ],
+  agendamentos: [],
+  api: { mode:'local', url:'', token:'', webhook:'' },
+  /* Sellflux: o token NUNCA fica aqui — ele vive no backend. `proxy` é a rota da nossa
+     API que repassa a chamada. Ver SELLFLUX-API.md. */
+  sellflux: { ativo:false, proxy:'', actingUserId:'', templateConfirmacao:'', tags:'kart,agendamento' }
+};
+
+let unidadeAtual = 'goiania';
+let dataAtual = hojeISO();
+let editandoId = null;
+
+/* ---------------- utilidades ---------------- */
+function hojeISO(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function parseISO(s){ const [y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+function addDias(iso,n){ const d=parseISO(iso); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function min2hm(m){ return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`; }
+function hm2min(hm){ const [h,m]=hm.split(':').map(Number); return h*60+m; }
+function uid(){ return 'ag_'+Math.random().toString(36).slice(2,8)+Date.now().toString(36).slice(-3); }
+function esc(s){ return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2400); }
+function unidade(id){ return DB.unidades.find(u=>u.id===(id||unidadeAtual)) || DB.unidades[0]; }
+function cfg(){ return unidade().cfg; }
+function agoraMin(){ const d=new Date(); return d.getHours()*60+d.getMinutes(); }
+
+/* ---------------- gera as baterias do dia ---------------- */
+function baterias(uid_, dataISO){
+  const c = unidade(uid_).cfg;
+  const dow = parseISO(dataISO).getDay();
+  if(!c.days.includes(dow)) return [];
+  const out=[]; const fim=hm2min(c.close);
+  for(let t=hm2min(c.open); t+c.dur<=fim; t+=c.dur+c.gap){
+    out.push({ inicio:min2hm(t), fim:min2hm(t+c.dur), min:t, capacidade:c.karts });
+  }
+  return out;
+}
+
+/* ---------------- camada de persistência ---------------- */
+const Store = {
+  get remoto(){ return DB.api.mode==='api' && DB.api.url; },
+
+  async _fetch(path, opts={}){
+    const r = await fetch(DB.api.url.replace(/\/$/,'') + path, {
+      ...opts,
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+DB.api.token, ...(opts.headers||{}) }
+    });
+    if(!r.ok){ let e; try{ e=await r.json(); }catch{ e={erro:r.status}; } throw new Error(e.mensagem||e.erro||('HTTP '+r.status)); }
+    return r.status===204 ? null : r.json();
+  },
+
+  async listar(dataISO, uid_){
+    if(this.remoto){
+      try{ return await this._fetch(`/agendamentos?data=${dataISO}&unidade=${uid_||unidadeAtual}`); }
+      catch(e){ toast('API: '+e.message); return []; }
+    }
+    return DB.agendamentos.filter(a=>a.data===dataISO && a.unidade===(uid_||unidadeAtual));
+  },
+
+  todos(){ return DB.agendamentos; },
+
+  async criar(ag){
+    ag.id = ag.id || uid();
+    ag.criadoEm = new Date().toISOString();
+    if(this.remoto){ const r = await this._fetch('/agendamentos',{method:'POST',body:JSON.stringify(ag)}); ag = {...ag,...r}; }
+    else { DB.agendamentos.push(ag); salvar(); }
+    espelharNoSellflux('criado', ag);
+    return ag;
+  },
+
+  async atualizar(id, patch){
+    if(this.remoto){ await this._fetch('/agendamentos/'+id,{method:'PATCH',body:JSON.stringify(patch)}); }
+    const i = DB.agendamentos.findIndex(a=>a.id===id);
+    if(i>=0){ DB.agendamentos[i] = {...DB.agendamentos[i], ...patch}; salvar();
+      espelharNoSellflux('atualizado', DB.agendamentos[i]); }
+  },
+
+  /* grava o vínculo com a Sellflux sem passar pelo espelhamento de novo (evita laço) */
+  marcarSellflux(id, patch){
+    const i = DB.agendamentos.findIndex(a=>a.id===id);
+    if(i>=0){ DB.agendamentos[i] = {...DB.agendamentos[i], ...patch}; salvar(); }
+  },
+
+  async remover(id){
+    if(this.remoto){ await this._fetch('/agendamentos/'+id,{method:'DELETE'}); }
+    DB.agendamentos = DB.agendamentos.filter(a=>a.id!==id); salvar();
+  },
+
+  async disponibilidade(dataISO, pessoas, uid_){
+    if(this.remoto){
+      try{ return await this._fetch(`/disponibilidade?data=${dataISO}&pessoas=${pessoas}&unidade=${uid_||unidadeAtual}`); }
+      catch(e){ toast('API: '+e.message); }
+    }
+    const ags = DB.agendamentos.filter(a=>a.data===dataISO && a.unidade===(uid_||unidadeAtual));
+    return baterias(uid_, dataISO).map(b=>{
+      const ocup = ocupacao(ags, b.inicio);
+      return { bateria:b.inicio, fim:b.fim, capacidade:b.capacidade, ocupadas:ocup, vagas:b.capacidade-ocup };
+    });
+  }
+};
+
+/* status "cancelado" e "noshow" não ocupam kart */
+function ocupacao(ags, horario){
+  return ags.filter(a=>a.bateria===horario && a.status!=='cancelado' && a.status!=='noshow')
+            .reduce((s,a)=>s+Number(a.pessoas||0),0);
+}
+
+function salvar(){ localStorage.setItem(LS, JSON.stringify(DB)); }
+
+/* Garante as chaves que o código assume, para um backup antigo (salvo antes da
+   integração Sellflux existir) não derrubar o painel ao ser restaurado. */
+function normalizar(d){
+  const base = { unidades:[], agendamentos:[],
+    api:{ mode:'local', url:'', token:'', webhook:'' },
+    sellflux:{ ativo:false, proxy:'', actingUserId:'', templateConfirmacao:'', tags:'kart,agendamento' } };
+  const out = {...base, ...(d||{})};
+  out.api = {...base.api, ...(d?.api||{})};
+  out.sellflux = {...base.sellflux, ...(d?.sellflux||{})};
+  if(!Array.isArray(out.unidades) || !out.unidades.length) out.unidades = DB.unidades;
+  if(!Array.isArray(out.agendamentos)) out.agendamentos = [];
+  out.unidades.forEach(u=>{ u.cfg = {...PADRAO_CFG, ...(u.cfg||{})}; });
+  return out;
+}
+
+function carregar(){
+  const raw = localStorage.getItem(LS);
+  if(raw){ try{ DB = normalizar({...DB, ...JSON.parse(raw)}); }catch(e){ console.warn('storage corrompido',e); } }
+}
+
+/* =========================================================================
+   SELLFLUX — adaptador da API real (ver SELLFLUX-API.md)
+
+   Por que tudo passa por um proxy: a chave da Sellflux dá acesso ao CRM inteiro do
+   projeto. Se ela ficasse aqui, qualquer pessoa que abrisse a página leria a chave no
+   localStorage. O browser também bate em CORS. Então o painel chama a NOSSA API, que
+   guarda a chave e repassa. `proxy` é a base dessa rota; o backend espelha os mesmos
+   paths da Sellflux e injeta o Authorization.
+
+   Fuso: as duas unidades (Goiânia e São Paulo) são UTC-3 o ano todo — o Brasil não tem
+   mais horário de verão. Por isso o offset é fixo em vez de vir do relógio do navegador,
+   que pode estar em qualquer lugar.
+   ========================================================================= */
+const OFFSET_BR = '-03:00';
+const TZ_BR = 'America/Sao_Paulo';
+
+const Sellflux = {
+  get ligado(){ return DB.sellflux.ativo && DB.sellflux.proxy; },
+
+  async req(path, opts={}){
+    const base = DB.sellflux.proxy.replace(/\/$/,'');
+    const r = await fetch(base + path, {
+      ...opts,
+      headers:{ 'Content-Type':'application/json', ...(opts.headers||{}) }
+    });
+    const txt = await r.text();
+    let body; try{ body = txt ? JSON.parse(txt) : null; }catch{ body = txt; }
+    if(!r.ok) throw new Error(`HTTP ${r.status} em ${path} — ${typeof body==='string'?body.slice(0,120):JSON.stringify(body).slice(0,120)}`);
+    return body;
+  },
+
+  /* `acting_user_id` é obrigatório nas rotas de CRM quando a auth é por chave de API.
+     Vai como número: a API devolve os ids do time como inteiro (user_id: 316372). */
+  get atuante(){ const n = Number(DB.sellflux.actingUserId); return Number.isFinite(n) && n>0 ? n : null; },
+
+  /* GET /api/v1/crm/team/users — é como se descobre um acting_user_id válido */
+  async usuarios(){
+    const r = await this.req('/api/v1/crm/team/users?page=1&limit=30&search=');
+    return r?.data || r?.users || r || [];
+  },
+
+  /* Monta ISO 8601 a partir de "2026-07-20" + "19:00" */
+  iso(dataISO, hm, somaMin=0){
+    const t = hm2min(hm) + somaMin;
+    const dia = addDias(dataISO, Math.floor(t/1440));
+    return `${dia}T${min2hm(((t%1440)+1440)%1440)}:00${OFFSET_BR}`;
+  },
+
+  /* GET /api/v1/lead/project?search= — search casa por nome, e-mail OU telefone.
+     Serve para não duplicar lead a cada reserva do mesmo cliente. */
+  async acharLead(termo){
+    if(!termo) return null;
+    const r = await this.req(`/api/v1/lead/project?page=1&search=${encodeURIComponent(termo)}`);
+    const lista = r?.data || (Array.isArray(r) ? r : []);
+    return lista[0] || null;
+  },
+
+  /* POST /api/v1/lead → 201 { id }.
+     Chaves extras (bateria/unidade/pessoas) só gravam se existirem como campo
+     personalizado no projeto Sellflux — senão são ignoradas em silêncio. */
+  async criarLead(ag){
+    const tags = DB.sellflux.tags.split(',').map(s=>s.trim()).filter(Boolean);
+    const r = await this.req('/api/v1/lead', { method:'POST', body:JSON.stringify({
+      name: ag.nome, email: ag.email || undefined, phone: ag.telefone || undefined, tags,
+      unidade: unidade(ag.unidade).nome, bateria: ag.bateria, pessoas: ag.pessoas
+    })});
+    return r?.id || r?.data?.id || null;
+  },
+
+  async garantirLead(ag){
+    if(ag.sellflux_lead_id) return ag.sellflux_lead_id;
+    const achado = await this.acharLead(ag.telefone || ag.email || ag.nome);
+    if(achado?.id) return achado.id;
+    return await this.criarLead(ag);
+  },
+
+  /* POST /api/v1/crm/schedules — schedule_type só aceita meeting|call|task|email,
+     não existe tipo de reserva, então bateria vira `meeting`. */
+  corpoAgendamento(ag, leadId){
+    const dur = unidade(ag.unidade).cfg.dur;
+    const u = unidade(ag.unidade).nome;
+    return {
+      subject: `Kart · ${ag.nome} · ${ag.pessoas} piloto${ag.pessoas===1?'':'s'} · ${u}`,
+      description: [
+        `Bateria ${ag.bateria} na unidade ${u}.`,
+        `${ag.pessoas} kart${ag.pessoas===1?'':'s'} · origem: ${ag.origem||'—'}`,
+        ag.observacoes ? `Obs.: ${ag.observacoes}` : '',
+        `Reserva ${ag.id} na Agenda Nacional Kart.`
+      ].filter(Boolean).join('\n'),
+      start_date: this.iso(ag.data, ag.bateria),
+      end_date: this.iso(ag.data, ag.bateria, dur),
+      timezone: TZ_BR,
+      schedule_type: 'meeting',
+      lead_ids: leadId ? String(leadId) : undefined,  /* a doc pede separados por vírgula */
+      acting_user_id: this.atuante || undefined
+    };
+  },
+
+  /* POST /automation/v1/whatsapp/lead — {lead_id, template_id, data} */
+  async whatsapp(leadId, ag){
+    const tpl = DB.sellflux.templateConfirmacao;
+    if(!tpl || !leadId) return null;
+    return this.req('/automation/v1/whatsapp/lead', { method:'POST', body:JSON.stringify({
+      lead_id: leadId, template_id: Number(tpl),
+      data: { nome:ag.nome, bateria:ag.bateria, data:ag.data,
+              unidade:unidade(ag.unidade).nome, pessoas:String(ag.pessoas) }
+    })});
+  },
+
+  /* Fluxo completo de uma reserva nova: lead → compromisso → confirmação */
+  async sincronizar(ag){
+    const leadId = await this.garantirLead(ag);
+    const corpo = this.corpoAgendamento(ag, leadId);
+    const r = await this.req('/api/v1/crm/schedules', { method:'POST', body:JSON.stringify(corpo) });
+    const scheduleId = r?.id || r?.data?.id || null;
+    let zap = false;
+    try{ zap = !!(await this.whatsapp(leadId, ag)); }
+    catch(e){ console.warn('confirmação no WhatsApp falhou:', e.message); }
+    return { leadId, scheduleId, zap };
+  },
+
+  /* PUT /api/v1/crm/schedules/:id */
+  async atualizar(ag){
+    if(!ag.sellflux_schedule_id) return null;
+    return this.req('/api/v1/crm/schedules/'+ag.sellflux_schedule_id, {
+      method:'PUT', body:JSON.stringify(this.corpoAgendamento(ag, ag.sellflux_lead_id))
+    });
+  }
+};
+
+/* Espelha a reserva na Sellflux sem travar a UI: a atendente não pode ficar esperando
+   o CRM responder. Falhou, marca o registro e avisa — a reserva local continua válida. */
+function espelharNoSellflux(evento, ag){
+  if(!Sellflux.ligado) return;
+  if(ag.status==='cancelado' || ag.status==='noshow') return;
+
+  const p = ag.sellflux_schedule_id ? Sellflux.atualizar(ag) : Sellflux.sincronizar(ag);
+  p.then(r=>{
+    if(r && r.scheduleId){
+      Store.marcarSellflux(ag.id, { sellflux_lead_id:r.leadId, sellflux_schedule_id:r.scheduleId, sellflux_erro:null });
+      toast('Sellflux: lead e compromisso criados' + (r.zap ? ' · WhatsApp enviado' : ''));
+    }
+  }).catch(e=>{
+    Store.marcarSellflux(ag.id, { sellflux_erro: e.message });
+    toast('Sellflux falhou: ' + e.message);
+    console.warn('Sellflux:', e);
+  });
+}
+
+/* =========================================================================
+   RENDER — GRADE DO DIA
+   ========================================================================= */
+async function renderGrade(){
+  const d = parseISO(dataAtual);
+  document.getElementById('dInput').value = dataAtual;
+  document.getElementById('dLabel').innerHTML =
+    `${DIAS_FULL[d.getDay()]}<small>${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()} · ${unidade().nome}</small>`;
+
+  const bats = baterias(unidadeAtual, dataAtual);
+  const ags  = await Store.listar(dataAtual);
+  const grid = document.getElementById('grid');
+
+  if(!bats.length){
+    grid.innerHTML = `<div class="nores" style="grid-column:1/-1">Não há baterias nesta data — a unidade <b>${esc(unidade().nome)}</b> não funciona ${DIAS_FULL[d.getDay()]}. Ajuste em Configuração.</div>`;
+    document.getElementById('kpis').innerHTML = '';
+    return;
+  }
+
+  /* KPIs */
+  const capTotal = bats.reduce((s,b)=>s+b.capacidade,0);
+  const ocupTotal = bats.reduce((s,b)=>s+ocupacao(ags,b.inicio),0);
+  const ativos = ags.filter(a=>a.status!=='cancelado');
+  const lotadas = bats.filter(b=>ocupacao(ags,b.inicio)>=b.capacidade).length;
+  const livres = capTotal-ocupTotal;
+  const taxa = capTotal? Math.round(ocupTotal/capTotal*100):0;
+  const receita = ativos.reduce((s,a)=>s+Number(a.pessoas||0),0) * Number(cfg().price||0);
+  const pend = ags.filter(a=>a.status==='pendente').length;
+
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="lbl">Agendamentos</div><div class="val">${ativos.length}</div><div class="sub">${pend} pendente${pend===1?'':'s'}</div></div>
+    <div class="kpi"><div class="lbl">Pilotos</div><div class="val">${ocupTotal}</div><div class="sub">de ${capTotal} lugares</div></div>
+    <div class="kpi"><div class="lbl">Vagas livres</div><div class="val" style="color:${livres>0?'var(--green)':'var(--danger)'}">${livres}</div><div class="sub">em ${bats.length-lotadas} bateria${bats.length-lotadas===1?'':'s'}</div></div>
+    <div class="kpi"><div class="lbl">Ocupação</div><div class="val">${taxa}%</div><div class="sub">${lotadas} bateria${lotadas===1?'':'s'} lotada${lotadas===1?'':'s'}</div></div>
+    <div class="kpi"><div class="lbl">Receita prevista</div><div class="val">R$ ${receita.toLocaleString('pt-BR')}</div><div class="sub">R$ ${Number(cfg().price).toLocaleString('pt-BR')} / piloto</div></div>`;
+
+  /* cards */
+  const passado = dataAtual < hojeISO();
+  const hoje = dataAtual === hojeISO();
+  grid.innerHTML = bats.map(b=>{
+    const lista = ags.filter(a=>a.bateria===b.inicio).sort((x,y)=>(x.nome||'').localeCompare(y.nome||''));
+    const ocup = ocupacao(ags,b.inicio);
+    const vagas = b.capacidade-ocup;
+    const pct = Math.min(100, ocup/b.capacidade*100);
+    const st = vagas<=0 ? 'full' : (pct>=60 ? 'filling' : 'free');
+    const ja = passado || (hoje && b.min+cfg().dur < agoraMin());
+    return `<div class="bat s-${st}${ja?' s-past':''}" data-bat="${b.inicio}">
+      <div class="bat-head">
+        <div class="bat-time">${b.inicio}<small>até ${b.fim}</small></div>
+        <div class="spacer"></div>
+        <div style="text-align:right">
+          <span class="pill ${st}">${vagas>0? vagas+' vaga'+(vagas===1?'':'s') : 'Lotada'}</span>
+          <div style="font-size:12px;color:var(--muted);font-weight:700;margin-top:4px">${ocup}/${b.capacidade} karts</div>
+        </div>
+      </div>
+      <div style="padding:0 14px"><div class="bar"><i style="width:${pct}%"></i></div></div>
+      <div class="bat-body">
+        ${lista.length ? lista.map(a=>`
+          <div class="book st-${a.status}" data-edit="${a.id}" title="${esc(a.nome)} · ${a.pessoas} pessoa(s) · ${a.status}${a.observacoes?' · '+esc(a.observacoes):''}">
+            <span class="qty">${a.pessoas}</span>
+            <span class="nm">${esc(a.nome)}</span>
+            ${a.origem==='sellflux'?'<span class="src" title="veio do Sellflux"></span>':''}
+          </div>`).join('')
+        : '<div class="empty-slot">Bateria livre</div>'}
+      </div>
+      <div class="bat-foot">
+        <button class="btn ${vagas>0?'btn-ghost':'btn-ghost'} btn-sm" data-add="${b.inicio}" ${vagas<=0?'disabled':''}>
+          ${vagas>0? '+ Encaixar aqui' : 'Sem vaga'}
+        </button>
+      </div>
+    </div>`;
+  }).join('');
+
+  grid.querySelectorAll('[data-add]').forEach(el=>el.onclick=e=>{ e.stopPropagation(); abrirModal(null, el.dataset.add); });
+  grid.querySelectorAll('[data-edit]').forEach(el=>el.onclick=e=>{ e.stopPropagation(); abrirModal(el.dataset.edit); });
+}
+
+/* =========================================================================
+   RENDER — ENCAIXE
+   ========================================================================= */
+async function buscarEncaixe(){
+  const qty  = Math.max(1, Number(document.getElementById('fQty').value)||1);
+  const data = document.getElementById('fDate').value || hojeISO();
+  const from = document.getElementById('fFrom').value || '00:00';
+  const out  = document.getElementById('fitOut');
+
+  const disp = await Store.disponibilidade(data, qty);
+  const hoje = data===hojeISO();
+  const corte = hoje ? Math.max(hm2min(from), agoraMin()) : hm2min(from);
+  const desde = corte>0 ? ` a partir das ${min2hm(corte)}` : '';
+  const cands = disp.filter(b=>hm2min(b.bateria)>=corte);
+  const cabem = cands.filter(b=>b.vagas>=qty);
+
+  if(!cands.length){ out.innerHTML = `<div class="nores">Não há mais baterias nessa data${desde}. Tente o dia seguinte, ou confira os dias de funcionamento em Configuração.</div>`; return; }
+
+  let html = '';
+  if(cabem.length){
+    html += `<div class="sec-title">${cabem.length} bateria${cabem.length===1?'':'s'} onde o grupo de ${qty} cabe inteiro</div>
+      <div class="fitres">${cabem.map(b=>{
+        const perfect = b.vagas===qty;
+        return `<button class="fit${perfect?' perfect':''}" data-fit="${b.bateria}" data-data="${data}" data-qty="${qty}">
+          ${perfect?'<span class="tag">encaixe exato</span>':''}
+          <div class="t">${b.bateria}</div>
+          <div class="d">${b.vagas} vaga${b.vagas===1?'':'s'} livres · ${b.ocupadas}/${b.capacidade} ocupados</div>
+        </button>`; }).join('')}</div>`;
+  } else {
+    const parciais = cands.filter(b=>b.vagas>0);
+    const soma = parciais.reduce((s,b)=>s+b.vagas,0);
+    html += `<div class="nores">Nenhuma bateria sozinha comporta <b>${qty} pessoas</b> nesse dia${desde}.
+      ${soma>=qty? `Mas existem <b>${soma} vagas</b> espalhadas — dá para dividir o grupo entre as baterias abaixo.` : `Só há ${soma} vaga${soma===1?'':'s'} no total restante.`}</div>`;
+    if(parciais.length){
+      html += `<div class="sec-title">Dividir o grupo</div>
+        <div class="fitres">${parciais.map(b=>`
+          <button class="fit split" data-fit="${b.bateria}" data-data="${data}" data-qty="${Math.min(qty,b.vagas)}">
+            <div class="t">${b.bateria}</div>
+            <div class="d">cabem ${Math.min(qty,b.vagas)} de ${qty} · ${b.vagas} vaga${b.vagas===1?'':'s'}</div>
+          </button>`).join('')}</div>`;
+    }
+  }
+  out.innerHTML = html;
+  out.querySelectorAll('[data-fit]').forEach(el=>el.onclick=()=>{
+    dataAtual = el.dataset.data;
+    abrirModal(null, el.dataset.fit, Number(el.dataset.qty));
+  });
+}
+
+/* =========================================================================
+   RENDER — LISTA
+   ========================================================================= */
+function renderLista(){
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const fs = document.getElementById('fltStatus').value;
+  const fr = document.getElementById('fltRange').value;
+  const hoje = hojeISO();
+
+  let rows = DB.agendamentos.filter(a=>a.unidade===unidadeAtual);
+  if(fr==='futuro')  rows = rows.filter(a=>a.data>=hoje);
+  if(fr==='hoje')    rows = rows.filter(a=>a.data===hoje);
+  if(fr==='passado') rows = rows.filter(a=>a.data<hoje);
+  if(fs) rows = rows.filter(a=>a.status===fs);
+  if(q)  rows = rows.filter(a=>[a.nome,a.telefone,a.email,a.observacoes].join(' ').toLowerCase().includes(q));
+  rows.sort((a,b)=> (a.data+a.bateria).localeCompare(b.data+b.bateria));
+
+  const tb = document.getElementById('tbody');
+  if(!rows.length){ tb.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:32px">Nenhum agendamento encontrado.</td></tr>`; return; }
+
+  const LBL = {confirmado:'Confirmado',pendente:'Pendente',compareceu:'Compareceu',noshow:'No-show',cancelado:'Cancelado'};
+  tb.innerHTML = rows.map(a=>{
+    const d = parseISO(a.data);
+    return `<tr>
+      <td><b>${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}</b> <span style="color:var(--muted)">${DIAS[d.getDay()]}</span></td>
+      <td><b>${a.bateria}</b></td>
+      <td>${esc(a.nome)}${a.observacoes?`<div style="font-size:12px;color:var(--muted)">${esc(a.observacoes)}</div>`:''}</td>
+      <td style="color:var(--muted)">${esc(a.telefone||'—')}</td>
+      <td><b>${a.pessoas}</b></td>
+      <td><span class="badge b-${a.status}">${LBL[a.status]||a.status}</span></td>
+      <td><span class="src-tag ${a.origem==='sellflux'?'api':''}">${esc(a.origem||'—')}</span>
+        ${a.sellflux_schedule_id? `<div class="src-tag api" title="Compromisso ${a.sellflux_schedule_id} na Sellflux">↗ sellflux</div>` : ''}
+        ${a.sellflux_erro? `<div class="src-tag" style="color:var(--danger)" title="${esc(a.sellflux_erro)}">⚠ falhou</div>` : ''}
+      </td>
+      <td><div class="rowact">
+        <button class="iconbtn" data-edit="${a.id}" title="Editar">✎</button>
+        <button class="iconbtn del" data-del="${a.id}" title="Excluir">🗑</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  tb.querySelectorAll('[data-edit]').forEach(el=>el.onclick=()=>abrirModal(el.dataset.edit));
+  tb.querySelectorAll('[data-del]').forEach(el=>el.onclick=async()=>{
+    const a = DB.agendamentos.find(x=>x.id===el.dataset.del);
+    if(confirm(`Excluir o agendamento de ${a.nome} (${a.data} ${a.bateria})?`)){
+      await Store.remover(el.dataset.del); renderLista(); renderGrade(); toast('Agendamento excluído');
+    }
+  });
+}
+
+/* =========================================================================
+   MODAL
+   ========================================================================= */
+async function abrirModal(id, batPre, qtyPre){
+  editandoId = id || null;
+  const a = id ? DB.agendamentos.find(x=>x.id===id) : null;
+
+  document.getElementById('mTitle').textContent = a ? 'Editar agendamento' : 'Novo agendamento';
+  document.getElementById('mSub').textContent = unidade().nome + (a? ' · '+a.id : '');
+  document.getElementById('mNome').value   = a?.nome || '';
+  document.getElementById('mTel').value    = a?.telefone || '';
+  document.getElementById('mEmail').value  = a?.email || '';
+  document.getElementById('mData').value   = a?.data || dataAtual;
+  document.getElementById('mQty').value    = a?.pessoas || qtyPre || 1;
+  document.getElementById('mStatus').value = a?.status || 'confirmado';
+  document.getElementById('mOrigem').value = a?.origem || 'balcao';
+  document.getElementById('mObs').value    = a?.observacoes || '';
+
+  await preencherBaterias(a?.bateria || batPre);
+  document.getElementById('ov').classList.add('on');
+  setTimeout(()=>document.getElementById('mNome').focus(),50);
+}
+
+async function preencherBaterias(sel){
+  const data = document.getElementById('mData').value || dataAtual;
+  const disp = await Store.disponibilidade(data, 1);
+  const s = document.getElementById('mBat');
+
+  if(!disp.length){ s.innerHTML = '<option value="">Sem baterias nesta data</option>'; checarCapacidade(); return; }
+
+  s.innerHTML = disp.map(b=>{
+    // ao editar, as vagas do próprio agendamento voltam a contar como disponíveis
+    let vagas = b.vagas;
+    if(editandoId){
+      const cur = DB.agendamentos.find(x=>x.id===editandoId);
+      if(cur && cur.bateria===b.bateria && cur.status!=='cancelado' && cur.status!=='noshow') vagas += Number(cur.pessoas||0);
+    }
+    const lot = vagas<=0;
+    return `<option value="${b.bateria}" data-vagas="${vagas}" ${lot?'disabled':''} ${sel===b.bateria?'selected':''}>
+      ${b.bateria} — ${lot? 'LOTADA' : vagas+' vaga'+(vagas===1?'':'s')+' de '+b.capacidade}
+    </option>`;
+  }).join('');
+
+  if(sel) s.value = sel;
+  else { const primeira = [...s.options].find(o=>!o.disabled); if(primeira) s.value = primeira.value; }
+  checarCapacidade();
+}
+
+function checarCapacidade(){
+  const s = document.getElementById('mBat');
+  const opt = s.options[s.selectedIndex];
+  const box = document.getElementById('mCap');
+  if(!opt || !opt.dataset.vagas){ box.innerHTML=''; return; }
+  const vagas = Number(opt.dataset.vagas);
+  const qty = Number(document.getElementById('mQty').value)||1;
+  const rest = vagas-qty;
+  box.innerHTML = rest>=0
+    ? `<div class="capnote">✓ Cabe. Sobram ${rest} vaga${rest===1?'':'s'} nessa bateria depois desse encaixe.</div>`
+    : `<div class="capnote bad">✕ Não cabe — a bateria ${s.value} tem ${vagas} vaga${vagas===1?'':'s'} e você pediu ${qty}. Use a aba Encaixe para achar outra.</div>`;
+}
+
+function fecharModal(){ document.getElementById('ov').classList.remove('on'); editandoId=null; }
+
+async function salvarModal(){
+  const nome = document.getElementById('mNome').value.trim();
+  const bat  = document.getElementById('mBat').value;
+  const qty  = Number(document.getElementById('mQty').value)||1;
+  if(!nome){ toast('Informe o nome do cliente'); document.getElementById('mNome').focus(); return; }
+  if(!bat){ toast('Escolha uma bateria'); return; }
+
+  const opt = document.getElementById('mBat').options[document.getElementById('mBat').selectedIndex];
+  const status = document.getElementById('mStatus').value;
+  const ocupa = status!=='cancelado' && status!=='noshow';
+  if(ocupa && Number(opt.dataset.vagas) < qty){ toast('Essa bateria não tem vaga suficiente'); return; }
+
+  const dados = {
+    nome,
+    telefone: document.getElementById('mTel').value.trim(),
+    email: document.getElementById('mEmail').value.trim(),
+    data: document.getElementById('mData').value,
+    bateria: bat,
+    pessoas: qty,
+    status,
+    origem: document.getElementById('mOrigem').value,
+    observacoes: document.getElementById('mObs').value.trim(),
+    unidade: unidadeAtual
+  };
+
+  if(editandoId) await Store.atualizar(editandoId, dados);
+  else await Store.criar(dados);
+
+  fecharModal(); renderGrade(); renderLista();
+  toast(editandoId? 'Agendamento atualizado' : `${nome} agendado às ${bat}`);
+}
+
+/* =========================================================================
+   CONFIG
+   ========================================================================= */
+function renderConfig(){
+  const c = cfg();
+  document.getElementById('cOpen').value  = c.open;
+  document.getElementById('cClose').value = c.close;
+  document.getElementById('cDur').value   = c.dur;
+  document.getElementById('cGap').value   = c.gap;
+  document.getElementById('cKarts').value = c.karts;
+  document.getElementById('cPrice').value = c.price;
+
+  document.getElementById('cDays').innerHTML = DIAS.map((d,i)=>`
+    <button class="btn btn-sm ${c.days.includes(i)?'btn-dark':'btn-ghost'}" data-day="${i}" style="text-transform:capitalize;min-width:56px;justify-content:center">${d}</button>`).join('');
+  document.getElementById('cDays').querySelectorAll('[data-day]').forEach(el=>el.onclick=()=>{
+    const i = Number(el.dataset.day); const dd = cfg().days;
+    const k = dd.indexOf(i); k>=0 ? dd.splice(k,1) : dd.push(i);
+    dd.sort(); salvar(); renderConfig();
+  });
+
+  document.getElementById('unitList').innerHTML = DB.unidades.map(u=>`
+    <div class="ep">
+      <b style="flex:1">${esc(u.nome)}</b>
+      <code style="color:var(--muted)">${u.id}</code>
+      <span>${baterias(u.id, hojeISO()).length} baterias/dia · ${u.cfg.karts} karts</span>
+      ${DB.unidades.length>1? `<button class="iconbtn del" data-rmu="${u.id}" title="Remover">🗑</button>`:''}
+    </div>`).join('');
+  document.getElementById('unitList').querySelectorAll('[data-rmu]').forEach(el=>el.onclick=()=>{
+    const u = unidade(el.dataset.rmu);
+    if(confirm(`Remover a unidade "${u.nome}" e todos os agendamentos dela?`)){
+      DB.unidades = DB.unidades.filter(x=>x.id!==el.dataset.rmu);
+      DB.agendamentos = DB.agendamentos.filter(a=>a.unidade!==el.dataset.rmu);
+      if(unidadeAtual===el.dataset.rmu) unidadeAtual = DB.unidades[0].id;
+      salvar(); renderUnidades(); renderConfig(); renderGrade();
+    }
+  });
+}
+
+function renderUnidades(){
+  const s = document.getElementById('unitSel');
+  s.innerHTML = DB.unidades.map(u=>`<option value="${u.id}" ${u.id===unidadeAtual?'selected':''}>${esc(u.nome)}</option>`).join('');
+}
+
+/* =========================================================================
+   API panel
+   ========================================================================= */
+function renderApi(){
+  document.getElementById('aMode').value  = DB.api.mode;
+  document.getElementById('aUrl').value   = DB.api.url;
+  document.getElementById('aToken').value = DB.api.token;
+  const s = DB.sellflux;
+  document.getElementById('sfProxy').value = s.proxy;
+  document.getElementById('sfUser').value  = s.actingUserId;
+  document.getElementById('sfTpl').value   = s.templateConfirmacao;
+  document.getElementById('sfTags').value  = s.tags;
+  document.getElementById('sfAtivo').checked = s.ativo;
+  statusApi(); statusSellflux();
+}
+
+function statusSellflux(txt, cls){
+  const el = document.getElementById('sfStatus');
+  if(txt){ el.className='status '+cls; el.innerHTML=`<span class="dot"></span> ${esc(txt)}`; return; }
+  if(Sellflux.ligado){ el.className='status ok'; el.innerHTML='<span class="dot"></span> Espelhando na Sellflux'; }
+  else { el.className='status off'; el.innerHTML='<span class="dot"></span> Desligado'; }
+}
+function statusApi(txt, cls){
+  const el = document.getElementById('aStatus');
+  if(txt){ el.className='status '+cls; el.innerHTML=`<span class="dot"></span> ${txt}`; return; }
+  if(DB.api.mode==='api' && DB.api.url){ el.className='status ok'; el.innerHTML='<span class="dot"></span> Modo API — '+esc(DB.api.url); }
+  else { el.className='status off'; el.innerHTML='<span class="dot"></span> Modo local (dados neste navegador)'; }
+}
+
+/* =========================================================================
+   Dados de exemplo
+   ========================================================================= */
+function seed(){
+  const nomes = ['João Silva','Maria Souza','Pedro Alves','Ana Costa','Lucas Lima','Bruna Dias','Rafael Gomes','Carla Nunes','Diego Rocha','Fernanda Melo','Grupo Ambev','Aniversário Théo','Turma Colégio Delta','Marcos Vinícius','Juliana Prado'];
+  const origens = ['balcao','telefone','whatsapp','sellflux','site'];
+  const sts = ['confirmado','confirmado','confirmado','pendente','compareceu'];
+  let n = 0;
+  for(let dd=0; dd<4; dd++){
+    const data = addDias(hojeISO(), dd);
+    const bats = baterias(unidadeAtual, data);
+    if(!bats.length) continue;
+    bats.forEach(b=>{
+      if(Math.random()<0.42) return;
+      let vagas = b.capacidade;
+      const k = 1+Math.floor(Math.random()*3);
+      for(let i=0;i<k && vagas>0;i++){
+        const q = Math.min(vagas, 1+Math.floor(Math.random()*4));
+        DB.agendamentos.push({
+          id:uid(), nome:nomes[Math.floor(Math.random()*nomes.length)],
+          telefone:'(62) 9'+Math.floor(1000+Math.random()*8999)+'-'+Math.floor(1000+Math.random()*8999),
+          email:'', data, bateria:b.inicio, pessoas:q,
+          status: dd===0? sts[Math.floor(Math.random()*sts.length)] : (Math.random()<.8?'confirmado':'pendente'),
+          origem: origens[Math.floor(Math.random()*origens.length)],
+          observacoes:'', unidade:unidadeAtual, criadoEm:new Date().toISOString()
+        });
+        vagas -= q; n++;
+      }
+    });
+  }
+  salvar(); renderGrade(); renderLista(); toast(n+' agendamentos de exemplo criados');
+}
+
+/* =========================================================================
+   Eventos
+   ========================================================================= */
+function bind(){
+  /* tabs */
+  document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('page-'+t.dataset.page).classList.add('active');
+    if(t.dataset.page==='lista') renderLista();
+    if(t.dataset.page==='config') renderConfig();
+    if(t.dataset.page==='api') renderApi();
+    if(t.dataset.page==='encaixe'){ document.getElementById('fDate').value = dataAtual; buscarEncaixe(); }
+  });
+
+  /* unidade */
+  document.getElementById('unitSel').onchange = e=>{ unidadeAtual = e.target.value; renderGrade(); renderLista(); renderConfig(); };
+
+  /* data */
+  document.getElementById('dPrev').onclick  = ()=>{ dataAtual = addDias(dataAtual,-1); renderGrade(); };
+  document.getElementById('dNext').onclick  = ()=>{ dataAtual = addDias(dataAtual, 1); renderGrade(); };
+  document.getElementById('dToday').onclick = ()=>{ dataAtual = hojeISO(); renderGrade(); };
+  document.getElementById('dInput').onchange= e=>{ dataAtual = e.target.value; renderGrade(); };
+
+  /* modal */
+  document.getElementById('newBtn').onclick  = ()=>abrirModal();
+  document.getElementById('newBtn2').onclick = ()=>abrirModal();
+  document.getElementById('mClose').onclick  = fecharModal;
+  document.getElementById('mCancel').onclick = fecharModal;
+  document.getElementById('mSave').onclick   = salvarModal;
+  document.getElementById('ov').onclick = e=>{ if(e.target.id==='ov') fecharModal(); };
+  document.getElementById('mData').onchange  = ()=>preencherBaterias();
+  document.getElementById('mBat').onchange   = checarCapacidade;
+  document.getElementById('mQty').oninput    = checarCapacidade;
+  document.getElementById('mStatus').onchange= checarCapacidade;
+  document.getElementById('mMinus').onclick  = ()=>{ const i=document.getElementById('mQty'); i.value=Math.max(1,Number(i.value)-1); checarCapacidade(); };
+  document.getElementById('mPlus').onclick   = ()=>{ const i=document.getElementById('mQty'); i.value=Number(i.value)+1; checarCapacidade(); };
+  document.addEventListener('keydown', e=>{
+    if(e.key==='Escape') fecharModal();
+    if(e.key==='Enter' && document.getElementById('ov').classList.contains('on') && e.target.tagName!=='TEXTAREA') salvarModal();
+  });
+
+  /* encaixe */
+  document.getElementById('fGo').onclick    = buscarEncaixe;
+  document.getElementById('fMinus').onclick = ()=>{ const i=document.getElementById('fQty'); i.value=Math.max(1,Number(i.value)-1); buscarEncaixe(); };
+  document.getElementById('fPlus').onclick  = ()=>{ const i=document.getElementById('fQty'); i.value=Number(i.value)+1; buscarEncaixe(); };
+  document.getElementById('fQty').oninput   = buscarEncaixe;
+  document.getElementById('fDate').onchange = buscarEncaixe;
+  document.getElementById('fFrom').onchange = buscarEncaixe;
+  document.getElementById('fAgora').onclick = ()=>{
+    document.getElementById('fDate').value = hojeISO();
+    document.getElementById('fFrom').value = min2hm(agoraMin());
+    buscarEncaixe();
+  };
+
+  /* lista */
+  document.getElementById('q').oninput = renderLista;
+  document.getElementById('fltStatus').onchange = renderLista;
+  document.getElementById('fltRange').onchange = renderLista;
+  document.getElementById('exportBtn').onclick = ()=>{
+    const rows = DB.agendamentos.filter(a=>a.unidade===unidadeAtual);
+    const head = ['id','data','bateria','nome','telefone','email','pessoas','status','origem','observacoes'];
+    const csv = [head.join(';'), ...rows.map(a=>head.map(h=>`"${String(a[h]??'').replace(/"/g,'""')}"`).join(';'))].join('\n');
+    baixar('agenda-'+unidadeAtual+'-'+hojeISO()+'.csv', '﻿'+csv, 'text/csv');
+  };
+
+  /* config */
+  document.getElementById('cSave').onclick = ()=>{
+    const c = cfg();
+    c.open  = document.getElementById('cOpen').value;
+    c.close = document.getElementById('cClose').value;
+    c.dur   = Math.max(1, Number(document.getElementById('cDur').value)||20);
+    c.gap   = Math.max(0, Number(document.getElementById('cGap').value)||0);
+    c.karts = Math.max(1, Number(document.getElementById('cKarts').value)||10);
+    c.price = Number(document.getElementById('cPrice').value)||0;
+    salvar(); renderConfig(); renderGrade(); toast('Configuração salva');
+  };
+  document.getElementById('cReset').onclick = ()=>{
+    if(!confirm('Restaurar a configuração padrão desta unidade?')) return;
+    unidade().cfg = {...PADRAO_CFG, days:[...PADRAO_CFG.days]};
+    salvar(); renderConfig(); renderGrade(); toast('Configuração restaurada');
+  };
+  document.getElementById('addUnit').onclick = ()=>{
+    const nome = document.getElementById('newUnit').value.trim();
+    if(!nome) return toast('Dê um nome à unidade');
+    const id = nome.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');
+    if(DB.unidades.some(u=>u.id===id)) return toast('Já existe uma unidade com esse nome');
+    DB.unidades.push({ id, nome, cfg:{...PADRAO_CFG, days:[...PADRAO_CFG.days]} });
+    document.getElementById('newUnit').value='';
+    salvar(); renderUnidades(); renderConfig(); toast('Unidade "'+nome+'" criada');
+  };
+
+  /* dados */
+  document.getElementById('dumpBtn').onclick = ()=>baixar('backup-agenda-'+hojeISO()+'.json', JSON.stringify(DB,null,2), 'application/json');
+  document.getElementById('loadBtn').onclick = ()=>document.getElementById('fileIn').click();
+  document.getElementById('fileIn').onchange = e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = ()=>{ try{ DB = normalizar(JSON.parse(r.result)); unidadeAtual = DB.unidades[0].id; salvar(); boot(); toast('Backup restaurado'); }
+                     catch(err){ toast('Arquivo inválido'); } };
+    r.readAsText(f);
+  };
+  document.getElementById('seedBtn').onclick = seed;
+  document.getElementById('wipeBtn').onclick = ()=>{
+    if(!confirm('Apagar TODOS os agendamentos e configurações? Essa ação não tem volta.')) return;
+    localStorage.removeItem(LS); location.reload();
+  };
+
+  /* api */
+  document.getElementById('aSave').onclick = ()=>{
+    DB.api.mode  = document.getElementById('aMode').value;
+    DB.api.url   = document.getElementById('aUrl').value.trim();
+    DB.api.token = document.getElementById('aToken').value.trim();
+    if(DB.api.mode==='api' && !DB.api.url){ toast('Informe a URL da API'); return; }
+    salvar(); statusApi(); renderGrade(); toast('Configuração de API salva');
+  };
+  document.getElementById('aTest').onclick = async()=>{
+    const url = document.getElementById('aUrl').value.trim();
+    if(!url) return toast('Informe a URL da API');
+    statusApi('Testando…','off');
+    try{
+      const r = await fetch(url.replace(/\/$/,'')+'/config?unidade='+unidadeAtual, {
+        headers:{ 'Authorization':'Bearer '+document.getElementById('aToken').value.trim() }});
+      statusApi(r.ok? 'Conectado — HTTP '+r.status : 'Falhou — HTTP '+r.status, r.ok?'ok':'err');
+    }catch(e){ statusApi('Sem resposta: '+e.message,'err'); }
+  };
+  /* sellflux */
+  document.getElementById('sfSave').onclick = ()=>{
+    const s = DB.sellflux;
+    s.proxy = document.getElementById('sfProxy').value.trim();
+    s.actingUserId = document.getElementById('sfUser').value.trim();
+    s.templateConfirmacao = document.getElementById('sfTpl').value.trim();
+    s.tags = document.getElementById('sfTags').value.trim();
+    s.ativo = document.getElementById('sfAtivo').checked;
+    if(s.ativo && !s.proxy){ s.ativo=false; document.getElementById('sfAtivo').checked=false; toast('Informe a URL do proxy para ligar o espelhamento'); }
+    if(s.ativo && !s.actingUserId) toast('Atenção: sem acting_user_id a Sellflux recusa o compromisso');
+    salvar(); statusSellflux(); toast('Sellflux salvo');
+  };
+  document.getElementById('sfTest').onclick = async()=>{
+    const proxy = document.getElementById('sfProxy').value.trim();
+    if(!proxy) return toast('Informe a URL do proxy');
+    const antes = DB.sellflux.proxy; DB.sellflux.proxy = proxy;
+    statusSellflux('Testando…','off');
+    try{
+      const u = await Sellflux.usuarios();
+      const n = Array.isArray(u)? u.length : 0;
+      statusSellflux(`Conectado — ${n} usuário${n===1?'':'s'} no projeto`, 'ok');
+    }catch(e){ statusSellflux('Falhou: '+e.message, 'err'); }
+    DB.sellflux.proxy = antes;
+  };
+  document.getElementById('sfUsers').onclick = async()=>{
+    const proxy = document.getElementById('sfProxy').value.trim();
+    if(!proxy) return toast('Informe a URL do proxy primeiro');
+    const antes = DB.sellflux.proxy; DB.sellflux.proxy = proxy;
+    try{
+      const u = await Sellflux.usuarios();
+      if(!u.length) return toast('Nenhum usuário retornado');
+      const linhas = u.map(x=>`${x.user_id||x.id} — ${x.name||x.email||'(sem nome)'}`).join('\n');
+      alert('Usuários do projeto (use o ID como acting_user_id):\n\n'+linhas);
+    }catch(e){ toast('Falhou: '+e.message); }
+    DB.sellflux.proxy = antes;
+  };
+
+  /* copiar blocos de código */
+  document.querySelectorAll('.copy').forEach(b=>b.onclick=()=>{
+    const el = document.getElementById(b.dataset.copy).cloneNode(true);
+    el.querySelector('.copy')?.remove();
+    navigator.clipboard.writeText(el.textContent.trim()).then(()=>toast('Copiado'));
+  });
+}
+
+function baixar(nome, conteudo, tipo){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([conteudo],{type:tipo}));
+  a.download = nome; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* =========================================================================
+   Boot
+   ========================================================================= */
+function boot(){
+  document.getElementById('fDate').value = hojeISO();
+  renderUnidades(); renderGrade(); renderConfig(); renderApi();
+}
+carregar();
+if(!DB.unidades.some(u=>u.id===unidadeAtual)) unidadeAtual = DB.unidades[0].id;
+bind();
+boot();
+
+/* Exposto p/ debug no console: NK.DB, NK.Store, NK.baterias(...) */
+window.NK = { get DB(){return DB;}, Store, Sellflux, baterias, salvar, seed, normalizar };
+</script>
+</body>
+</html>
