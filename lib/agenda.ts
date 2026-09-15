@@ -5,8 +5,8 @@
 import { z } from "zod";
 import { buscarUnidade } from "./db";
 import { AppError } from "./http";
-import { formatarTelefone, MARCA_CANCELADO, montarDescription, montarSubject, normalizarTelefone } from "./parse";
-import { actingUserId, atualizarLead, atualizarSchedule, buscarScheduleRaw, criarSchedule, listarReservas, normalizarSchedule, upsertLead } from "./sellflux";
+import { atualizarDescription, formatarTelefone, MARCA_CANCELADO, montarDescription, montarSubject, validarTelefone, type CamposDescription } from "./parse";
+import { actingUserId, atualizarLead, atualizarSchedule, buscarScheduleRaw, buscarVinculosSchedule, criarSchedule, listarReservas, normalizarSchedule, upsertLead, type VinculosSchedule } from "./sellflux";
 import { gerarHorarios, montarGrade, slotsQueCabem, vagasEm, type Reserva, type Slot, type Unidade } from "./slots";
 import { dataCurta, localToUtcIso, somarMinutos } from "./tz";
 
@@ -23,7 +23,10 @@ export const novaReservaSchema = z.object({
 });
 export type NovaReserva = z.infer<typeof novaReservaSchema>;
 
-export const editarReservaSchema = novaReservaSchema.partial().required({ unidade: true });
+export const editarReservaSchema = novaReservaSchema.partial().required({ unidade: true }).extend({
+  /** descrição na Sellflux, editada como texto livre; "" limpa */
+  description: z.string().max(4000).optional(),
+});
 export type EditarReserva = z.infer<typeof editarReservaSchema>;
 
 export type Grade = { unidade: Unidade; data: string; slots: Slot[]; foraDaGrade: Reserva[] };
@@ -45,9 +48,9 @@ export async function carregarGrade(unidade: Unidade & { sellfluxUserId: number 
 }
 
 function telefoneOuErro(t: string): string {
-  const e164 = normalizarTelefone(t);
-  if (!e164) throw new AppError(400, { erro: "telefone_invalido", mensagem: "Informe DDD + número (ex.: 62 98765-4321)." });
-  return e164;
+  const v = validarTelefone(t);
+  if (!v.ok) throw new AppError(400, { erro: "telefone_invalido", mensagem: `Telefone inválido: ${v.motivo} Ex.: (62) 98765-4321.` });
+  return v.e164;
 }
 
 function validarSlot(unidade: Unidade, data: string, horario: string) {
@@ -65,13 +68,12 @@ function lotado(grade: Grade, horario: string, pessoas: number, vagas: number): 
   });
 }
 
-function textos(nome: string, data: string, horario: string, telefoneE164: string, pessoas: number) {
-  return {
-    subject: montarSubject(nome, pessoas),
-    description: montarDescription({ nome, dataCurta: dataCurta(data), horario, telefoneFormatado: formatarTelefone(telefoneE164), pessoas }),
-    start_date: localToUtcIso(data, horario),
-    end_date: localToUtcIso(data, somarMinutos(horario, 30) ?? "23:59"),
-  };
+function campos(nome: string, data: string, horario: string, telefoneE164: string, pessoas: number): CamposDescription {
+  return { nome, dataCurta: dataCurta(data), horario, telefoneFormatado: formatarTelefone(telefoneE164), pessoas };
+}
+
+function periodo(data: string, horario: string) {
+  return { start_date: localToUtcIso(data, horario), end_date: localToUtcIso(data, somarMinutos(horario, 30) ?? "23:59") };
 }
 
 export async function criarReserva(input: NovaReserva): Promise<Reserva> {
@@ -86,7 +88,9 @@ export async function criarReserva(input: NovaReserva): Promise<Reserva> {
 
   const leadId = await upsertLead({ name: input.nome, phone: telefone, participantes: input.pessoas });
   const raw = await criarSchedule({
-    ...textos(input.nome, input.data, input.horario, telefone, input.pessoas),
+    subject: montarSubject(input.nome, input.pessoas),
+    description: montarDescription(campos(input.nome, input.data, input.horario, telefone, input.pessoas)),
+    ...periodo(input.data, input.horario),
     lead_ids: String(leadId),
     participant_user_ids: String(unidade.sellfluxUserId),
     acting_user_id: actingUserId(unidade.sellfluxUserId),
@@ -120,8 +124,16 @@ export async function editarReserva(id: string, input: EditarReserva): Promise<R
   if (atual.leadIds[0] && (input.pessoas !== undefined || input.nome)) {
     await atualizarLead(atual.leadIds[0], { participantes: pessoas, name: input.nome });
   }
-  const raw = await atualizarSchedule(id, { ...textos(nome, data, horario, telefone, pessoas), acting_user_id: actingUserId(unidade.sellfluxUserId) });
-  return normalizarSchedule(raw) ?? { ...atual, nome, data, horario, pessoas, telefone, subject: montarSubject(nome, pessoas), startIso: localToUtcIso(data, horario) };
+  // descrição: o texto que a atendente mandou (ou o atual), com as linhas padrão dos campos alterados reescritas
+  const alterados: (keyof CamposDescription)[] = [];
+  if (input.nome !== undefined) alterados.push("nome");
+  if (input.data !== undefined || input.horario !== undefined) alterados.push("dataCurta", "horario");
+  if (input.telefone !== undefined) alterados.push("telefoneFormatado");
+  if (input.pessoas !== undefined) alterados.push("pessoas");
+  const description = atualizarDescription(input.description ?? atual.description, campos(nome, data, horario, telefone, pessoas), alterados);
+
+  const raw = await atualizarSchedule(id, { subject: montarSubject(nome, pessoas), description, ...periodo(data, horario), acting_user_id: actingUserId(unidade.sellfluxUserId) });
+  return normalizarSchedule(raw) ?? { ...atual, nome, data, horario, pessoas, telefone, description, subject: montarSubject(nome, pessoas), startIso: localToUtcIso(data, horario) };
 }
 
 /**
@@ -137,4 +149,10 @@ export async function cancelarReserva(id: string, slug: string): Promise<Reserva
 
   const raw = await atualizarSchedule(id, { subject: `${atual.subject} ${MARCA_CANCELADO}`, acting_user_id: actingUserId(unidade.sellfluxUserId) });
   return normalizarSchedule(raw) ?? { ...atual, subject: `${atual.subject} ${MARCA_CANCELADO}`, status: "cancelado", cancelado: true };
+}
+
+/** Lead e chat de uma reserva, para os links "abrir na Sellflux" da ficha. */
+export async function vinculosReserva(id: string, slug: string): Promise<VinculosSchedule> {
+  const unidade = await unidadeOuErro(slug);
+  return buscarVinculosSchedule(id, unidade.sellfluxUserId);
 }

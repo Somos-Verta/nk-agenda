@@ -226,6 +226,27 @@ export async function buscarScheduleRaw(id: number | string, unidadeUserId: numb
   return (body && typeof body === "object" && "data" in body && body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body) as ScheduleRaw;
 }
 
+/** Ids do lead e do chat vinculados a um agendamento — só existem quando ele foi criado a partir de um contato. */
+export type VinculosSchedule = { leadId: number | null; chatId: number | null };
+
+/**
+ * `GET /crm/schedules/:id/links` devolve vínculos `{source_type, source_id, target_type, target_id}`;
+ * os que interessam são `lead → schedule` e `chat → schedule`. O id do chat não aparece em nenhuma outra rota
+ * (testado 15/09/2026), e é ele que abre a conversa em app.sellflux.com/chats/:id.
+ */
+export async function buscarVinculosSchedule(id: number | string, unidadeUserId: number): Promise<VinculosSchedule> {
+  const body = await sf(`/api/v1/crm/schedules/${id}/links`, { query: { acting_user_id: actingUserId(unidadeUserId) } });
+  const out: VinculosSchedule = { leadId: null, chatId: null };
+  for (const l of itens<Record<string, unknown>>(body)) {
+    if (String(l.target_type) !== "schedule" || String(l.target_id) !== String(id)) continue;
+    const sid = num(l.source_id);
+    if (sid === null) continue;
+    if (l.source_type === "lead" && out.leadId === null) out.leadId = sid;
+    if (l.source_type === "chat" && out.chatId === null) out.chatId = sid;
+  }
+  return out;
+}
+
 export async function criarSchedule(input: ScheduleInput): Promise<ScheduleRaw> {
   const body = await sf<Record<string, unknown>>("/api/v1/crm/schedules", {
     method: "POST",

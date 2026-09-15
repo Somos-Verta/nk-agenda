@@ -1,40 +1,98 @@
 "use client";
 
-import { useState } from "react";
+import { CalendarDaysIcon, MessageSquareTextIcon, UserRoundIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { api, ApiError } from "@/lib/api-client";
 import type { Grade } from "@/lib/agenda";
-import { STATUS_LABEL, type Reserva } from "@/lib/slots";
-import { formatarTelefone } from "@/lib/parse";
+import type { VinculosSchedule } from "@/lib/sellflux";
+import { urlAgendaSellflux, urlChatSellflux, urlLeadSellflux } from "@/lib/links";
+import { formatarTelefone, mascararTelefone, validarTelefone } from "@/lib/parse";
+import type { Reserva } from "@/lib/slots";
+import { cn } from "@/lib/utils";
+import { formatarDataLonga } from "./DateNav";
+import { HorarioPicker } from "./HorarioPicker";
+import { PessoasStepper } from "./PessoasStepper";
+import { TelefoneInput } from "./TelefoneInput";
+import { STATUS_UI, StatusIcon } from "./status";
+import { bateriaPassou, type Agora } from "./useAgora";
 
-export function ReservaSheet({ grade, reserva, onClose, onAlterada }: {
+const LINK_SELLFLUX = "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium outline-none transition-colors hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50";
+
+/** O que cada status significa para a vaga — a regra que mais confunde no balcão. */
+function efeitoDoStatus(r: Reserva): { texto: string; tom: "neutro" | "aviso" | "livre" } {
+  const karts = `${r.pessoas} kart${r.pessoas === 1 ? "" : "s"}`;
+  switch (r.status) {
+    case "cancelado": return { texto: "Cancelada. Não ocupa kart na bateria.", tom: "livre" };
+    case "concluido": return { texto: `Concluída, mas continua ocupando ${karts} — só cancelar libera.`, tom: "aviso" };
+    case "nao_compareceu": return { texto: `Não compareceu, mas continua ocupando ${karts} — cancele para liberar.`, tom: "aviso" };
+    case "reagendado": return { texto: `Reagendada. Ocupa ${karts} nesta bateria.`, tom: "neutro" };
+    default: return { texto: `Ocupa ${karts} nesta bateria.`, tom: "neutro" };
+  }
+}
+
+export function ReservaSheet({ grade, reserva, agora, onClose, onAlterada }: {
   grade: Grade;
   reserva: Reserva;
+  /** hora atual no fuso das unidades — para avisar ao mover para uma bateria que já passou */
+  agora: Agora | null;
   onClose: () => void;
   onAlterada: () => void;
 }) {
   const [nome, setNome] = useState(reserva.nome);
-  const [telefone, setTelefone] = useState(reserva.telefone ? formatarTelefone(reserva.telefone) : "");
+  const [telefone, setTelefone] = useState(reserva.telefone ? mascararTelefone(reserva.telefone) : "");
   const [pessoas, setPessoas] = useState(String(reserva.pessoas));
   const [horario, setHorario] = useState(reserva.horario);
+  const [descricao, setDescricao] = useState(reserva.description ?? "");
   const [salvando, setSalvando] = useState(false);
   const [cancelando, setCancelando] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
+  const [confirmarPassado, setConfirmarPassado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const n = Math.max(1, Number(pessoas) || 1);
-  const opcoes = grade.slots.filter((s) => s.horario === reserva.horario || s.vagas >= n);
-  const mudou = nome !== reserva.nome || n !== reserva.pessoas || horario !== reserva.horario || (telefone && (!reserva.telefone || telefone !== formatarTelefone(reserva.telefone)));
+  const telefoneValidado = validarTelefone(telefone);
+  const telefoneMudou = telefoneValidado.ok && telefoneValidado.e164 !== reserva.telefone;
+  const telefoneInvalido = telefone !== "" && !telefoneValidado.ok;
+  const descricaoMudou = descricao.trim() !== (reserva.description ?? "").trim();
+  const mudou = nome !== reserva.nome || n !== reserva.pessoas || horario !== reserva.horario || telefoneMudou || descricaoMudou;
+  const efeito = efeitoDoStatus(reserva);
+  const slotAtual = grade.slots.find((s) => s.horario === reserva.horario);
+  // ao mudar de bateria, a própria reserva sai da atual: vagas "reais" para o picker
+  const slotsParaPicker = grade.slots.map((s) => (s.horario === reserva.horario && !reserva.cancelado ? { ...s, vagas: Math.min(s.capacidade, s.vagas + reserva.pessoas) } : s));
+  const destino = slotsParaPicker.find((s) => s.horario === horario);
+  const cabeDestino = destino ? destino.vagas >= n : true;
+  const passados = new Set(grade.slots.filter((s) => bateriaPassou(grade.data, s.fim, agora)).map((s) => s.horario));
+  // mover para uma bateria que já passou pede confirmação (editar a própria reserva num horário passado, não)
+  const moverParaPassado = horario !== reserva.horario && passados.has(horario);
+  const linhasDescricao = (reserva.description ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+  // lead e chat vêm de uma rota à parte da Sellflux; busca só quando a ficha abre
+  const [vinculos, setVinculos] = useState<VinculosSchedule | null>(null);
+  const [erroVinculos, setErroVinculos] = useState(false);
+  const leadId = vinculos?.leadId ?? reserva.leadIds[0] ?? null;
+  const chatId = vinculos?.chatId ?? null;
 
-  async function salvar(e: React.FormEvent) {
+  useEffect(() => {
+    let ativo = true;
+    api<VinculosSchedule>(`/api/agenda/${reserva.id}/vinculos?unidade=${grade.unidade.slug}`)
+      .then((v) => { if (ativo) setVinculos(v); })
+      .catch(() => { if (ativo) setErroVinculos(true); });
+    return () => { ativo = false; };
+  }, [reserva.id, grade.unidade.slug]);
+
+  function enviar(e: React.FormEvent) {
     e.preventDefault();
+    if (moverParaPassado && !confirmarPassado) { setConfirmarPassado(true); return; }
+    void salvar();
+  }
+
+  async function salvar() {
     setErro(null);
     setSalvando(true);
     try {
@@ -42,7 +100,8 @@ export function ReservaSheet({ grade, reserva, onClose, onAlterada }: {
       if (nome !== reserva.nome) patch.nome = nome;
       if (n !== reserva.pessoas) patch.pessoas = n;
       if (horario !== reserva.horario) { patch.horario = horario; patch.data = grade.data; }
-      if (telefone && (!reserva.telefone || telefone !== formatarTelefone(reserva.telefone))) patch.telefone = telefone;
+      if (telefoneMudou) patch.telefone = telefone;
+      if (descricaoMudou) patch.description = descricao.trim();
       await api(`/api/agenda/${reserva.id}`, { method: "PUT", json: patch });
       toast.success("Reserva atualizada.");
       onAlterada();
@@ -70,70 +129,121 @@ export function ReservaSheet({ grade, reserva, onClose, onAlterada }: {
 
   return (
     <Sheet open onOpenChange={(o) => { if (!o) onClose(); }}>
-      <SheetContent className="flex flex-col gap-4 overflow-y-auto sm:max-w-md">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            {reserva.nome} <Badge variant="secondary">{reserva.pessoas}p</Badge>
-            <Badge variant={reserva.cancelado ? "destructive" : "outline"}>{STATUS_LABEL[reserva.status]}</Badge>
+      <SheetContent className="gap-0 overflow-y-auto data-[side=right]:sm:max-w-xl">
+        <SheetHeader className="gap-1.5">
+          <SheetTitle className="flex flex-wrap items-center gap-2 pr-8 text-lg">
+            <span className={cn(reserva.cancelado && "text-muted-foreground line-through")}>{reserva.nome}</span>
+            <Badge className="bg-ink text-ink-foreground tabular-nums">{reserva.pessoas} pessoa{reserva.pessoas === 1 ? "" : "s"}</Badge>
+            <Badge variant="outline" className={cn("gap-1", STATUS_UI[reserva.status].cor)}>
+              <StatusIcon status={reserva.status} className="size-3.5" /> {STATUS_UI[reserva.status].label}
+            </Badge>
           </SheetTitle>
-          <SheetDescription>{grade.unidade.nome} · {grade.data.split("-").reverse().join("/")} às {reserva.horario}</SheetDescription>
+          <SheetDescription className="first-letter:uppercase">
+            {formatarDataLonga(grade.data)} · {reserva.horario} · {grade.unidade.nome}
+          </SheetDescription>
+          <p className={cn("text-sm", efeito.tom === "aviso" && "text-enchendo", efeito.tom === "livre" && "text-livre", efeito.tom === "neutro" && "text-muted-foreground")}>
+            {efeito.texto}
+            {slotAtual && !reserva.cancelado && ` A bateria ${slotAtual.horario} está com ${slotAtual.ocupacao} de ${slotAtual.capacidade} karts.`}
+          </p>
         </SheetHeader>
 
-        {!reserva.pessoasIdentificadas && (
-          <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm dark:bg-amber-950/30">
-            Este agendamento não segue o padrão &quot;Nome Np&quot; (foi criado direto na Sellflux). Está contando como 1 pessoa — ajuste abaixo.
-          </p>
-        )}
+        <div className="grid gap-3 px-4 pb-4">
+          {!reserva.pessoasIdentificadas && (
+            <p className="rounded-md border border-enchendo/40 bg-enchendo-soft p-2.5 text-sm">
+              Este agendamento não tem a quantidade no título (foi criado direto na Sellflux). Está contando como <strong>1 pessoa</strong> — ajuste abaixo.
+            </p>
+          )}
 
-        {reserva.description && (
-          <pre className="whitespace-pre-wrap rounded-md bg-muted p-3 font-sans text-sm">{reserva.description}</pre>
-        )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+            {reserva.telefone && <span className="tabular-nums">{formatarTelefone(reserva.telefone)}</span>}
+            {leadId && (
+              <a href={urlLeadSellflux(leadId)} target="_blank" rel="noopener noreferrer" className={LINK_SELLFLUX} title="Abre o lead na Sellflux, na aba de agendamentos">
+                <UserRoundIcon className="size-3.5" aria-hidden /> Contato
+              </a>
+            )}
+            {chatId && (
+              <a href={urlChatSellflux(chatId)} target="_blank" rel="noopener noreferrer" className={LINK_SELLFLUX} title="Abre a conversa deste lead na Sellflux">
+                <MessageSquareTextIcon className="size-3.5" aria-hidden /> Chat
+              </a>
+            )}
+            <a
+              href={urlAgendaSellflux({ data: reserva.data, respUserId: grade.unidade.sellfluxUserId, busca: reserva.nome })}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={LINK_SELLFLUX}
+              title={`Abre a agenda da Sellflux em ${reserva.data.split("-").reverse().join("/")}, filtrada por “${reserva.nome}”`}
+            >
+              <CalendarDaysIcon className="size-3.5" aria-hidden /> Agenda
+            </a>
+            {!vinculos && !erroVinculos && !chatId && <span className="text-xs text-muted-foreground">Buscando contato…</span>}
+            {erroVinculos && !chatId && <span className="text-xs text-muted-foreground">Não foi possível buscar o contato na Sellflux.</span>}
+            {vinculos && !leadId && !chatId && <span className="text-xs text-muted-foreground">Sem contato vinculado — agendamento criado sem lead.</span>}
+          </div>
 
-        {!reserva.cancelado && (
-          <form onSubmit={salvar} className="grid gap-3 px-1">
-            <Separator />
-            <div className="grid gap-2">
-              <Label htmlFor="e-nome">Nome</Label>
-              <Input id="e-nome" value={nome} onChange={(e) => setNome(e.target.value)} required />
+          {reserva.cancelado && linhasDescricao.length > 0 && (
+            <div className="rounded-md bg-muted/60 px-3 py-2 text-sm">
+              <p className="mb-1 text-xs text-muted-foreground">Descrição na Sellflux</p>
+              <ul className="grid gap-0.5">{linhasDescricao.map((l, i) => <li key={i}>{l}</li>)}</ul>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+          )}
+
+          {!reserva.cancelado && (
+            <form onSubmit={enviar} className="grid gap-3 border-t pt-3">
               <div className="grid gap-2">
-                <Label htmlFor="e-tel">Telefone</Label>
-                <Input id="e-tel" inputMode="tel" value={telefone} onChange={(e) => setTelefone(e.target.value)} placeholder="62 98765-4321" />
+                <Label htmlFor="e-nome">Nome</Label>
+                <Input id="e-nome" value={nome} onChange={(e) => setNome(e.target.value)} required />
+              </div>
+              <div className="grid grid-cols-[1fr_auto] gap-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="e-tel">Telefone</Label>
+                  <TelefoneInput id="e-tel" value={telefone} onChange={setTelefone} />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="e-pessoas">Pessoas</Label>
+                  <PessoasStepper id="e-pessoas" value={pessoas} onChange={setPessoas} />
+                </div>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="e-pessoas">Pessoas</Label>
-                <Input id="e-pessoas" type="number" min={1} value={pessoas} onChange={(e) => setPessoas(e.target.value)} required />
+                <Label>Bateria</Label>
+                <HorarioPicker slots={slotsParaPicker} value={horario} onChange={(h) => { setHorario(h); setConfirmarPassado(false); }} pessoas={n} atual={reserva.horario} passados={passados} />
+                {!cabeDestino && destino && (
+                  <p className="text-sm text-lotado">{destino.horario} tem só {destino.vagas} vaga{destino.vagas === 1 ? "" : "s"} — não cabem {n}.</p>
+                )}
+                {moverParaPassado && (
+                  <div className="rounded-md border border-enchendo/40 bg-enchendo-soft p-2.5 text-sm">
+                    <p className="font-medium">A bateria {horario} já passou.</p>
+                    {confirmarPassado && (
+                      <div className="mt-2 flex gap-2">
+                        <Button type="button" size="sm" className="bg-ink text-ink-foreground hover:bg-ink/85" onClick={() => void salvar()} disabled={salvando}>{salvando ? "Salvando…" : "Sim, mover mesmo assim"}</Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmarPassado(false)}>Voltar</Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-            <div className="grid gap-2">
-              <Label>Horário</Label>
-              <Select value={horario} onValueChange={(v) => setHorario(String(v ?? reserva.horario))}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {opcoes.map((s) => (
-                    <SelectItem key={s.horario} value={s.horario}>{s.horario} — {s.horario === reserva.horario ? "atual" : `${s.vagas} vaga${s.vagas === 1 ? "" : "s"}`}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {erro && <p className="text-sm text-destructive">{erro}</p>}
-            <Button type="submit" disabled={!mudou || salvando}>{salvando ? "Salvando…" : "Salvar alterações"}</Button>
-          </form>
-        )}
+              <div className="grid gap-2">
+                <Label htmlFor="e-desc">Descrição <span className="font-normal text-muted-foreground">(como está na Sellflux)</span></Label>
+                <Textarea id="e-desc" value={descricao} onChange={(e) => setDescricao(e.target.value)} maxLength={4000} rows={6} className="font-sans" />
+                <p className="text-xs text-muted-foreground">Texto livre. Ao mudar nome, pessoas, telefone ou bateria acima, o app atualiza só a linha correspondente aqui.</p>
+              </div>
+              {erro && <p className="text-sm text-lotado">{erro}</p>}
+              <Button type="submit" className="bg-ink text-ink-foreground hover:bg-ink/85" disabled={!mudou || !cabeDestino || telefoneInvalido || salvando || confirmarPassado}>{salvando ? "Salvando…" : "Salvar alterações"}</Button>
+            </form>
+          )}
+        </div>
 
         {!reserva.cancelado && (
-          <SheetFooter className="mt-auto">
+          <SheetFooter className="border-t">
             {confirmar ? (
               <div className="flex w-full flex-col gap-2">
-                <p className="text-sm">Cancelar a reserva de <strong>{reserva.nome}</strong>? Libera {reserva.pessoas} kart{reserva.pessoas === 1 ? "" : "s"} às {reserva.horario}.</p>
+                <p className="text-sm">Cancelar a reserva de <strong>{reserva.nome}</strong>? Libera {reserva.pessoas} kart{reserva.pessoas === 1 ? "" : "s"} às {reserva.horario}. Na Sellflux, o título recebe ❌.</p>
                 <div className="flex gap-2">
-                  <Button variant="destructive" onClick={cancelar} disabled={cancelando}>{cancelando ? "Cancelando…" : "Sim, cancelar"}</Button>
+                  <Button variant="destructive" onClick={cancelar} disabled={cancelando}>{cancelando ? "Cancelando…" : "Sim, cancelar reserva"}</Button>
                   <Button variant="ghost" onClick={() => setConfirmar(false)}>Voltar</Button>
                 </div>
               </div>
             ) : (
-              <Button variant="outline" className="text-destructive" onClick={() => setConfirmar(true)}>Cancelar reserva</Button>
+              <Button variant="outline" className="text-lotado" onClick={() => setConfirmar(true)}>Cancelar reserva</Button>
             )}
           </SheetFooter>
         )}
