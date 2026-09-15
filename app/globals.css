@@ -39,6 +39,23 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* NK: marca e estados de ocupação (a cor fica nos dados, não no chrome) */
+  --color-brand: var(--brand);
+  --color-agora: var(--agora);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-livre: var(--livre);
+  --color-livre-soft: var(--livre-soft);
+  --color-enchendo: var(--enchendo);
+  --color-enchendo-soft: var(--enchendo-soft);
+  --color-lotado: var(--lotado);
+  --color-lotado-soft: var(--lotado-soft);
+  /* status da reserva — mesmas cores da legenda da Sellflux (azul, laranja, roxo, verde, cinza) */
+  --color-st-agendado: var(--st-agendado);
+  --color-st-nao-compareceu: var(--st-nao-compareceu);
+  --color-st-reagendado: var(--st-reagendado);
+  --color-st-concluido: var(--st-concluido);
+  --color-st-cancelado: var(--st-cancelado);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -49,13 +66,13 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
+  --background: oklch(0.975 0.003 250);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  --primary: #011d4c;
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
@@ -81,6 +98,23 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* Nacional Kart: azul #003399 (chrome/topbar) e marinho #011d4c (ações, "tinta") */
+  --brand: #003399;
+  /* "agora" e "em pista": vermelho, como a hora atual do Google Agenda — independente da marca */
+  --agora: oklch(0.58 0.24 28);
+  --ink: #011d4c;
+  --ink-foreground: oklch(0.985 0 0);
+  --livre: oklch(0.6 0.14 163);
+  --livre-soft: oklch(0.96 0.035 163);
+  --enchendo: oklch(0.66 0.16 62);
+  --enchendo-soft: oklch(0.965 0.045 78);
+  --lotado: oklch(0.58 0.22 27);
+  --lotado-soft: oklch(0.955 0.03 27);
+  --st-agendado: oklch(0.6 0.19 258);
+  --st-nao-compareceu: oklch(0.7 0.17 55);
+  --st-reagendado: oklch(0.6 0.2 300);
+  --st-concluido: oklch(0.62 0.16 150);
+  --st-cancelado: oklch(0.6 0.005 260);
 }
 
 .dark {
@@ -115,6 +149,21 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --brand: #2a5bd7;
+  --agora: oklch(0.68 0.22 27);
+  --ink: #011d4c;
+  --ink-foreground: oklch(0.985 0 0);
+  --livre: oklch(0.75 0.14 163);
+  --livre-soft: oklch(0.75 0.14 163 / 14%);
+  --enchendo: oklch(0.78 0.15 70);
+  --enchendo-soft: oklch(0.78 0.15 70 / 14%);
+  --lotado: oklch(0.7 0.19 25);
+  --lotado-soft: oklch(0.7 0.19 25 / 14%);
+  --st-agendado: oklch(0.72 0.16 258);
+  --st-nao-compareceu: oklch(0.78 0.15 60);
+  --st-reagendado: oklch(0.74 0.16 300);
+  --st-concluido: oklch(0.75 0.15 150);
+  --st-cancelado: oklch(0.65 0.005 260);
 }
 
 @layer base {
@@ -126,5 +175,12 @@
   }
   html {
     @apply font-sans;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }

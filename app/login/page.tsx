@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -48,10 +49,13 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="flex flex-1 items-center justify-center p-6">
-      <Card className="w-full max-w-sm">
+      <Card className="w-full max-w-sm pt-0">
+        <div className="flex justify-center bg-brand px-6 py-5">
+          <Image src="/logo.png" alt="Nacional Kart Indoor" width={728} height={304} priority className="h-auto w-56" />
+        </div>
         <CardHeader>
-          <CardTitle>🏎️ NK Agenda</CardTitle>
-          <CardDescription>Agenda de baterias da Nacional Kart</CardDescription>
+          <CardTitle>Agenda de baterias</CardTitle>
+          <CardDescription>Entre com a senha da recepção.</CardDescription>
         </CardHeader>
         <CardContent>
           <Suspense><LoginForm /></Suspense>
