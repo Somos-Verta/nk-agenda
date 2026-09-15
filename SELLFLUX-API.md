@@ -71,7 +71,12 @@ Query: `page`, `limit`, `search` (busca no assunto e descrição), `status`,
 
 - `GET /api/v1/crm/schedules/:id`
 - `PUT /api/v1/crm/schedules/:id` — atualizar
-- `GET /api/v1/crm/schedules/:id/links` — vínculos com outras entidades
+- `GET /api/v1/crm/schedules/:id/links` — vínculos com outras entidades. Devolve
+  `[{source_type, source_id, target_type, target_id, …}]`; `lead → schedule` e `chat → schedule` só existem
+  quando o agendamento foi criado a partir de um contato (testado 15/09/2026: 2 de 8 tinham). O `source_id`
+  do tipo `chat` é o id da conversa em `app.sellflux.com/chats/:id` — **não aparece em nenhuma outra rota**;
+  o lead abre em `app.sellflux.com/leads/:id?activity_tab=meetings`. O app lê isso em
+  `GET /api/agenda/:id/vinculos` só quando a ficha da reserva abre.
 
 ## Leads — `/api/v1/lead`
 

@@ -45,3 +45,6 @@ next-env.d.ts
 
 # export da equipe Sellflux (contém senhas temporárias) — nunca versionar
 team.json
+
+# dumps crus da API Sellflux (dados de clientes) — nunca versionar
+sellflux-*.json
