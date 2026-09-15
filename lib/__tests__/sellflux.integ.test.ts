@@ -16,7 +16,7 @@ describe.skipIf(!process.env.SELLFLUX_TOKEN || !process.env.SELLFLUX_ACTING_USER
     const data = hojeLocal();
     for (const [nome, uid] of [["Penha", PENHA], ["Goiânia", GOIANIA]] as const) {
       const reservas = await listarReservas({ unidadeUserId: uid, startIso: localToUtcIso(data, "00:00"), endIso: localToUtcIso(data, "23:59") });
-      const unidade = { slug: nome.toLowerCase(), nome, sellfluxUserId: uid, capacidade: 12, duracaoMin: 30, horarios: { ...horariosVazios(), [String(new Date().getDay())]: [{ inicio: "10:00", fim: "23:00" }] } };
+      const unidade = { slug: nome.toLowerCase(), nome, sellfluxUserId: uid, capacidade: 12, duracaoMin: 30, precoPessoa: null, horarios: { ...horariosVazios(), [String(new Date().getDay())]: [{ inicio: "10:00", fim: "23:00" }] } };
       const { slots, foraDaGrade } = montarGrade(unidade, data, reservas);
       console.log(`\n${nome} ${data}: ${reservas.length} reservas, ${foraDaGrade.length} fora da grade`);
       for (const r of reservas) console.log(`  ${r.horario} ${r.nome.padEnd(28)} ${r.pessoas}p${r.pessoasIdentificadas ? "" : " (?)"}${r.cancelado ? " CANCELADA" : ""} [${r.status}/${r.outcome ?? "?"}] tel=${r.telefone ?? "-"} leads=${r.leadIds.join(",") || "-"}`);

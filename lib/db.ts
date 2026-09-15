@@ -22,6 +22,8 @@ export const unidadePatchSchema = z.object({
   sellfluxUserId: z.number().int().positive().nullable().optional(),
   capacidade: z.number().int().min(1).max(200).optional(),
   duracaoMin: z.number().int().min(5).max(240).optional(),
+  // centavos são aceitos; acima de 2 casas o Postgres arredonda (numeric(10,2))
+  precoPessoa: z.number().min(0).max(99_999_999).nullable().optional(),
   horarios: horariosSchema.optional(),
 });
 export type UnidadePatch = z.infer<typeof unidadePatchSchema>;
@@ -32,6 +34,7 @@ type Row = {
   sellflux_user_id: number | null;
   capacidade: number;
   duracao_min: number;
+  preco_pessoa: number | string | null; // numeric chega como string pelo PostgREST
   horarios: unknown;
   updated_at: string;
 };
@@ -54,6 +57,7 @@ function rowParaUnidade(r: Row): Unidade {
     sellfluxUserId: r.sellflux_user_id,
     capacidade: r.capacidade,
     duracaoMin: r.duracao_min,
+    precoPessoa: r.preco_pessoa === null || r.preco_pessoa === undefined ? null : Number(r.preco_pessoa),
     horarios: (parsed.success ? parsed.data : horariosSchema.parse({})) as Horarios,
   };
 }
@@ -76,6 +80,7 @@ export async function salvarUnidade(slug: string, patch: UnidadePatch): Promise<
   if (patch.sellfluxUserId !== undefined) row.sellflux_user_id = patch.sellfluxUserId;
   if (patch.capacidade !== undefined) row.capacidade = patch.capacidade;
   if (patch.duracaoMin !== undefined) row.duracao_min = patch.duracaoMin;
+  if (patch.precoPessoa !== undefined) row.preco_pessoa = patch.precoPessoa;
   if (patch.horarios !== undefined) row.horarios = patch.horarios;
   const { data, error } = await db().from("nk_unidades").update(row).eq("slug", slug).select("*").single();
   if (error) throw new Error(`Supabase: ${error.message}`);

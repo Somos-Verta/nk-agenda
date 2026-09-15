@@ -3,7 +3,7 @@ import { gerarHorarios, horariosVazios, montarGrade, slotsQueCabem, vagasEm, typ
 import { dataCurta, diaDaSemana, localToUtcIso, utcToLocal } from "../tz";
 
 const goiania: Unidade = {
-  slug: "goiania", nome: "Goiânia", sellfluxUserId: 1, capacidade: 12, duracaoMin: 30,
+  slug: "goiania", nome: "Goiânia", sellfluxUserId: 1, capacidade: 12, duracaoMin: 30, precoPessoa: null,
   horarios: { ...horariosVazios(), "1": [{ inicio: "14:00", fim: "22:00" }], "6": [{ inicio: "10:00", fim: "12:00" }, { inicio: "14:00", fim: "15:00" }] },
 };
 

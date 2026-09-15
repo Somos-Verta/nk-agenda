@@ -10,6 +10,8 @@ export type Unidade = {
   sellfluxUserId: number | null;
   capacidade: number;
   duracaoMin: number;
+  /** R$ por pessoa por bateria — base da previsão de faturamento. null = não configurado. */
+  precoPessoa: number | null;
   horarios: Horarios;
 };
 
@@ -69,19 +71,24 @@ export function horariosVazios(): Horarios {
   return { "0": [], "1": [], "2": [], "3": [], "4": [], "5": [], "6": [] };
 }
 
-/** Horários de início das baterias de uma unidade num dia (`YYYY-MM-DD`). */
-export function gerarHorarios(unidade: Unidade, data: string): string[] {
-  const dia = String(diaDaSemana(data)) as DiaSemana;
-  const intervalos = unidade.horarios[dia] ?? [];
+/** Horários de início das baterias que cabem nos intervalos (`HH:mm`), a cada `duracaoMin`. */
+export function horariosDeIntervalos(intervalos: Intervalo[], duracaoMin: number): string[] {
+  if (!(duracaoMin > 0)) return [];
   const out: string[] = [];
   for (const { inicio, fim } of intervalos) {
     let h: string | null = inicio;
-    while (h && minutosDoDia(h) + unidade.duracaoMin <= minutosDoDia(fim)) {
+    while (h && minutosDoDia(h) + duracaoMin <= minutosDoDia(fim)) {
       out.push(h);
-      h = somarMinutos(h, unidade.duracaoMin);
+      h = somarMinutos(h, duracaoMin);
     }
   }
   return [...new Set(out)].sort();
+}
+
+/** Horários de início das baterias de uma unidade num dia (`YYYY-MM-DD`). */
+export function gerarHorarios(unidade: Unidade, data: string): string[] {
+  const dia = String(diaDaSemana(data)) as DiaSemana;
+  return horariosDeIntervalos(unidade.horarios[dia] ?? [], unidade.duracaoMin);
 }
 
 /** Slot da grade em que um horário cai (o slot cujo início é ≤ horário < início + duração). */
@@ -143,4 +150,14 @@ export function slotsQueCabem(grade: Slot[], pessoas: number): Slot[] {
 /** Converte start/end ISO em campos locais da reserva. */
 export function localDe(startIso: string) {
   return utcToLocal(startIso);
+}
+
+export type Periodo = "Manhã" | "Tarde" | "Noite";
+
+/** Período do dia de um horário `HH:mm` — agrupa a grade na tela. */
+export function periodoDe(horario: string): Periodo {
+  const m = minutosDoDia(horario);
+  if (m < 12 * 60) return "Manhã";
+  if (m < 18 * 60) return "Tarde";
+  return "Noite";
 }
