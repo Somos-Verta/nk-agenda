@@ -3,6 +3,7 @@
  * Referência dos endpoints: SELLFLUX-API.md. Os shapes de resposta de /crm/* não são documentados —
  * `normalizarSchedule` tolera variações e o que for descoberto com o token real deve ser anotado lá.
  */
+import { revalidateTag } from "next/cache";
 import { isCancelado, parseNome, parsePessoas, parseTelefone } from "./parse";
 import type { Reserva, StatusReserva } from "./slots";
 import { utcToLocal } from "./tz";
@@ -32,14 +33,36 @@ export function actingUserId(unidadeUserId: number): number {
   return Number.isFinite(n) && n > 0 ? n : unidadeUserId;
 }
 
-async function sf<T = unknown>(path: string, init: RequestInit & { query?: Record<string, string | number | boolean | undefined> } = {}): Promise<T> {
+/**
+ * Cada chamada à Sellflux custa ~700 ms de latência fixa, independente do tamanho da resposta
+ * (medido 05/10/2026: `limit=1` 700 ms, `limit=300` 755 ms). Logo o que reduz o tempo da tela
+ * é fazer menos chamadas, e as leituras repetidas passam pelo Data Cache do Next:
+ * `revalidate` segundos de validade, `tags` para invalidar depois de gravar.
+ * `fresh` pula o cache (botão "Atualizar" da atendente e as leituras que antecedem uma escrita).
+ */
+export type Cache = { revalidate: number; tags: string[]; fresh?: boolean };
+
+type Init = Omit<RequestInit, "cache"> & {
+  query?: Record<string, string | number | boolean | undefined>;
+  cache?: Cache;
+  next?: { revalidate?: number; tags?: string[] };
+};
+
+function politicaDeCache(c?: Cache): Pick<Init, "next"> & { cache?: "no-store" } {
+  if (!c || c.fresh) return { cache: "no-store" };
+  return { next: { revalidate: c.revalidate, tags: c.tags } };
+}
+
+async function sf<T = unknown>(path: string, init: Init = {}): Promise<T> {
+  // `query` e `cache` são nossos; o resto vai para o fetch como está
+  const { query, cache, ...resto } = init;
   const url = new URL(path, BASE);
-  for (const [k, v] of Object.entries(init.query ?? {})) if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
+  for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined && v !== "") url.searchParams.set(k, String(v));
   const res = await fetch(url, {
-    ...init,
+    ...resto,
     headers: { accept: "application/json", "content-type": "application/json", authorization: `Bearer ${token()}`, ...(init.headers ?? {}) },
-    cache: "no-store",
-  });
+    ...politicaDeCache(cache),
+  } as RequestInit);
   const text = await res.text();
   let body: unknown = text;
   try { body = text ? JSON.parse(text) : null; } catch { /* mantém texto */ }
@@ -77,6 +100,36 @@ export async function listarUsuarios(search = ""): Promise<UsuarioSellflux[]> {
 }
 
 // ---------- Agenda ----------
+
+/** Tag da listagem de agendamentos (uma só: a listagem é a mesma para todas as unidades e datas). */
+export const TAG_SCHEDULES = "sellflux:schedules";
+/** Tag do detalhe de um agendamento (de onde vem o `meeting_outcome`). */
+const tagSchedule = (id: number | string) => `sellflux:schedule:${id}`;
+
+/**
+ * Validade das leituras cacheadas, em segundos.
+ *
+ * A página 1 da listagem tem o futuro e o passado recente — é a que muda. As seguintes só têm
+ * agendamentos com mais de ~37 dias, que na prática não mudam mais; ficam 10 min para a navegação
+ * no passado não esfriar entre um dia e outro. Gravar pelo app invalida todas (mesma tag), e o
+ * botão "Atualizar" ignora o cache — o único dado que pode envelhecer 10 min é um agendamento
+ * antigo editado direto na UI da Sellflux.
+ */
+const VALIDADE_LISTA = 30;
+const VALIDADE_LISTA_ANTIGA = 600;
+const VALIDADE_DETALHE = 60; // `meeting_outcome` só muda quando alguém mexe na UI da Sellflux
+
+/**
+ * Descarta o cache depois de criar/editar/cancelar, para a grade já sair com a mudança.
+ * `expire: 0` purga na hora (fora de Server Action o Next exige o perfil; `updateTag` não vale
+ * em route handler). Fora de uma requisição — testes, scripts — não há cache para invalidar.
+ */
+export function invalidarSchedules(id?: number | string): void {
+  try {
+    revalidateTag(TAG_SCHEDULES, { expire: 0 });
+    if (id !== undefined) revalidateTag(tagSchedule(id), { expire: 0 });
+  } catch { /* sem contexto de requisição do Next: nada a invalidar */ }
+}
 
 export type ScheduleInput = {
   subject: string;
@@ -163,14 +216,24 @@ async function emLotes<T, R>(itens: T[], n: number, fn: (t: T) => Promise<R>): P
 }
 
 /**
- * A listagem não traz `meeting_outcome`; GET /:id traz. Busca o detalhe de cada item (6 por vez, 1 retry).
+ * A listagem não traz `meeting_outcome`; GET /:id traz. Busca o detalhe de cada item (1 retry).
  * Se o detalhe falhar, mantém o item da lista — o título com ❌ ainda cobre o cancelamento.
+ *
+ * Paralelismo 12: medido em 05/10/2026, 1 chamada 535 ms · 6 juntas 832 ms · 12 juntas 1.144 ms ·
+ * 24 juntas 2.192 ms, nenhum erro. Acima de 12 o ganho por rodada desaparece (a Sellflux serializa),
+ * e com 120 simultâneos metade das chamadas falha.
  */
-export async function enriquecerComOutcome(raws: ScheduleRaw[], unidadeUserId: number): Promise<ScheduleRaw[]> {
-  return emLotes(raws, 6, async (r) => {
+const PARALELISMO_DETALHE = 12;
+
+export async function enriquecerComOutcome(raws: ScheduleRaw[], unidadeUserId: number, cache?: Pick<Cache, "fresh">): Promise<ScheduleRaw[]> {
+  return emLotes(raws, PARALELISMO_DETALHE, async (r) => {
     for (let tentativa = 0; tentativa < 2; tentativa++) {
       try {
-        const d = await buscarScheduleRaw(r.id as number, unidadeUserId);
+        const d = await buscarScheduleRaw(r.id as number, unidadeUserId, {
+          revalidate: VALIDADE_DETALHE,
+          tags: [TAG_SCHEDULES, tagSchedule(r.id as number)],
+          fresh: cache?.fresh,
+        });
         if (d && typeof d === "object" && "meeting_outcome" in d) return { ...r, ...d };
       } catch { /* tenta de novo */ }
     }
@@ -183,19 +246,27 @@ export async function enriquecerComOutcome(raws: ScheduleRaw[], unidadeUserId: n
  *
  * A Sellflux IGNORA `start_date`/`end_date` nesta rota (testado com todos os formatos em 14/09/2026),
  * mas devolve a lista ordenada por `start_date` desc e aceita `limit` grande. Então lemos página a página
- * e paramos assim que o último item ficou antes da janela — para "hoje" costuma ser 1 requisição
- * (só os agendamentos futuros vêm antes). Filtro final é feito aqui.
+ * e paramos assim que o último item ficou antes da janela. Filtro final é feito aqui.
+ *
+ * O `limit` define quanto passado cabe numa chamada, e é o que decide o custo de abrir uma data antiga:
+ * como o tempo de resposta é praticamente fixo (~1,2 s para 300 ou para 2.000 itens, medido 05/10/2026),
+ * vale pedir o máximo que ainda caiba no Data Cache. Com 2.000, a página 1 cobre o futuro inteiro mais
+ * ~37 dias de passado (0,98 MB) e a lista toda cabe em 3 páginas; com 5.000 seriam 2 páginas, mas os
+ * 2,39 MB passam do limite de 2 MB por entrada do cache da Vercel e a resposta deixaria de ser cacheada.
  */
-const PAGINA = 300;
-const MAX_PAGINAS = 20; // 6.000 agendamentos — datas muito antigas param aqui
+const PAGINA = 2000;
+const MAX_PAGINAS = 20; // 40.000 agendamentos — datas anteriores ao início do projeto param aqui
 
-export async function listarSchedulesRaw(opts: { unidadeUserId: number; startIso: string; endIso: string; status?: 1 | 2 }): Promise<ScheduleRaw[]> {
+export async function listarSchedulesRaw(opts: { unidadeUserId: number; startIso: string; endIso: string; status?: 1 | 2; fresh?: boolean }): Promise<ScheduleRaw[]> {
   const acting = actingUserId(opts.unidadeUserId);
   const out: ScheduleRaw[] = [];
   for (let page = 1; page <= MAX_PAGINAS; page++) {
     const body = await sf("/api/v1/crm/schedules", {
       // only_my_participation só faz sentido quando agimos como o próprio usuário da unidade
       query: { page, limit: PAGINA, status: opts.status, only_my_participation: acting === opts.unidadeUserId, acting_user_id: acting },
+      // a resposta é a mesma para todas as unidades e datas (a Sellflux ignora start_date/end_date),
+      // então uma página cacheada atende a troca de dia, a troca de unidade e as outras atendentes
+      cache: { revalidate: page === 1 ? VALIDADE_LISTA : VALIDADE_LISTA_ANTIGA, tags: [TAG_SCHEDULES], fresh: opts.fresh },
     });
     const lista = itens<ScheduleRaw>(body);
     let passouDaJanela = false;
@@ -211,18 +282,19 @@ export async function listarSchedulesRaw(opts: { unidadeUserId: number; startIso
   return out;
 }
 
-export async function listarReservas(opts: { unidadeUserId: number; startIso: string; endIso: string }): Promise<Reserva[]> {
+export async function listarReservas(opts: { unidadeUserId: number; startIso: string; endIso: string; fresh?: boolean }): Promise<Reserva[]> {
   const raws = (await listarSchedulesRaw(opts))
     // a agenda da unidade = agendamentos em que o usuário da unidade participa; filtramos no servidor
     // porque, agindo como outro usuário, a lista pode vir com o projeto inteiro
     .filter((r) => { const p = participantesDe(r); return p.length === 0 || p.includes(opts.unidadeUserId); });
-  return (await enriquecerComOutcome(raws, opts.unidadeUserId))
+  return (await enriquecerComOutcome(raws, opts.unidadeUserId, { fresh: opts.fresh }))
     .map(normalizarSchedule)
     .filter((r): r is Reserva => r !== null);
 }
 
-export async function buscarScheduleRaw(id: number | string, unidadeUserId: number): Promise<ScheduleRaw> {
-  const body = await sf<Record<string, unknown>>(`/api/v1/crm/schedules/${id}`, { query: { acting_user_id: actingUserId(unidadeUserId) } });
+/** Sem `cache`, lê direto da Sellflux — é o que editar/cancelar precisam, para não gravar sobre dado velho. */
+export async function buscarScheduleRaw(id: number | string, unidadeUserId: number, cache?: Cache): Promise<ScheduleRaw> {
+  const body = await sf<Record<string, unknown>>(`/api/v1/crm/schedules/${id}`, { query: { acting_user_id: actingUserId(unidadeUserId) }, cache });
   return (body && typeof body === "object" && "data" in body && body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body) as ScheduleRaw;
 }
 
@@ -252,11 +324,13 @@ export async function criarSchedule(input: ScheduleInput): Promise<ScheduleRaw> 
     method: "POST",
     body: JSON.stringify({ ...input, timezone: "America/Sao_Paulo", schedule_type: "meeting" }),
   });
+  invalidarSchedules();
   return (body && typeof body === "object" && "data" in body && body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body) as ScheduleRaw;
 }
 
 export async function atualizarSchedule(id: number | string, patch: Partial<ScheduleInput> & { status?: 1 | 2 }): Promise<ScheduleRaw> {
   const body = await sf<Record<string, unknown>>(`/api/v1/crm/schedules/${id}`, { method: "PUT", body: JSON.stringify(patch) });
+  invalidarSchedules(id);
   return (body && typeof body === "object" && "data" in body && body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body) as ScheduleRaw;
 }
 

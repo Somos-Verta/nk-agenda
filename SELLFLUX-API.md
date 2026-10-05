@@ -179,9 +179,47 @@ Nada disto está na doc. Verificado por chamadas reais.
 - **`start_date`/`end_date` como filtro são ignorados** — testado com ISO, `YYYY-MM-DD`, `DD/MM/YYYY`,
   `startDate`, `from/to`, `date`… todos devolvem os 4.439. `search` filtra texto em subject/description.
 - A lista vem **ordenada por `start_date` desc** (verificado em 1.000 itens) e `limit` aceita até 5.000.
-  → O app pagina (300 por página) e para quando passa do dia pedido; para hoje é 1 requisição, porque só
-  os agendamentos futuros (~100) vêm antes.
+  → O app pagina (2.000 por página) e para quando passa do dia pedido; para hoje é 1 requisição, porque só
+  os agendamentos futuros (~120) vêm antes. **O `limit` é o que define o custo de abrir uma data passada**
+  (ver Latência).
 - `only_my_participation=true` filtra pelo `acting_user_id` (não pelo participante desejado).
+
+### Latência (medido 05/10/2026, do Brasil, projeto com 5.366 agendamentos)
+
+O que domina o tempo da tela é o **número de chamadas**, não o volume de dados:
+
+| Chamada | Tempo |
+|---|---|
+| `GET /crm/schedules?limit=1` | ~700 ms |
+| `GET /crm/schedules?limit=300` (161 kB) | ~755 ms |
+| `GET /crm/schedules?limit=1000` (514 kB) | ~970 ms |
+| `GET /crm/schedules?limit=2000` (0,98 MB) | ~1.190 ms |
+| `GET /crm/schedules?limit=5000` (2,39 MB) | ~1.540 ms |
+| `GET /crm/schedules/:id` | ~535 ms |
+| 6 `GET /:id` em paralelo | 832 ms |
+| 12 `GET /:id` em paralelo | 1.144 ms |
+| 24 `GET /:id` em paralelo | 2.192 ms (nenhum erro) |
+
+- Subir o `limit` de 1 para 300 custa 55 ms, e de 300 para 2.000 não custa nada (ficou até mais rápido na
+  medição): **o payload é irrelevante**, a latência é do servidor deles. Não adianta pedir menos dados;
+  adianta pedir menos vezes.
+
+#### Quanto custa abrir uma data passada
+
+Como a lista vem desc e o filtro de período é ignorado, montar um dia passado exige ler todas as páginas
+até chegar nele. Com 5.368 agendamentos no projeto (o mais antigo é de 26/06/2026):
+
+| `limit` | 1 página recua até | Páginas para varrer tudo | Pior caso (data anterior ao projeto) |
+|---|---|---|---|
+| 300 | 2 dias | 18 | ~17 s |
+| 2.000 (atual) | ~37 dias | 3 | ~3,5 s |
+| 5.000 | ~89 dias | 2 | ~3 s, mas **não cacheável** |
+
+O teto é o Data Cache da Vercel: 2 MB por entrada. Com 5.000 a resposta tem 2,39 MB e deixaria de ser
+cacheada, o que custaria mais do que as páginas economizadas. Por isso 2.000.
+- O app usa paralelismo 12 no enriquecimento (acima disso a Sellflux serializa e o ganho por rodada some).
+- Como o filtro de período é ignorado e `only_my_participation` só vale para o `acting_user_id`, **uma
+  listagem serve todas as unidades e todas as datas** — é o que justifica cachear a resposta crua.
 
 ### Convenções já usadas pela equipe nos títulos
 

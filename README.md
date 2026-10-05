@@ -43,7 +43,7 @@ pnpm lint
 
 ```
 tela /agenda ──> GET /api/agenda?unidade&data ──> Sellflux GET /crm/schedules (usuário da unidade)
-                                                  + nk_unidades (capacidade, grade)
+                 (&fresh=1 ignora o cache)        + nk_unidades (capacidade, grade)
                                                   = slots de 30 min com ocupação e vagas
 
 Nova reserva ──> POST /api/agenda ──> recalcula vagas no servidor
@@ -54,6 +54,14 @@ Editar ──────> PUT /api/agenda/:id     (re-checa vaga ignorando a pr
 Cancelar ────> DELETE /api/agenda/:id  (PUT status=2; fallback: prefixo "CANCELADO - ")
 ```
 
+- **Cache.** Cada chamada à Sellflux custa ~700 ms de latência fixa (independe do tamanho da resposta), e a
+  listagem que ela devolve é a mesma para as quatro unidades e para qualquer data — a Sellflux ignora o filtro
+  de período. Então as leituras ficam no Data Cache do Next (tag `sellflux:schedules`), o que serve a troca
+  de dia, a troca de unidade e as outras atendentes sem nova chamada: 30 s para a primeira página da listagem
+  (futuro e passado recente) e 10 min para as seguintes, que só têm agendamentos antigos. `nk_unidades` fica
+  60 s em memória.
+  Criar, editar e cancelar invalidam a tag na hora. O botão **Atualizar** manda `?fresh=1`: lê direto na Sellflux
+  e descarta o cache para todo mundo. A checagem de vaga antes de gravar **nunca** usa cache.
 - Telefone: máscara `(62) 98765-4321` no formulário e validação estrita (DDD existente, 9º dígito, tamanho,
   sem sequências) no cliente e no servidor (`validarTelefone`); gravado em E.164 no lead e na descrição.
 - Ocupação de um slot = soma das pessoas dos agendamentos ativos que começam nele. A quantidade vem do

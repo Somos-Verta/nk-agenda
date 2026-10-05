@@ -4,6 +4,7 @@
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { invalidar, memo } from "./cache";
 import type { Horarios, Unidade } from "./slots";
 
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -62,16 +63,25 @@ function rowParaUnidade(r: Row): Unidade {
   };
 }
 
+/**
+ * Capacidade e horários mudam só na tela Configuração, mas eram lidos a cada carga da agenda
+ * (190-480 ms por requisição, medido). Ficam em cache por `TTL_MS`; gravar invalida na hora.
+ * Outra instância do servidor só vê a mudança quando o TTL dela expira.
+ */
+const CHAVE = "unidades";
+const TTL_MS = 60_000;
+
 export async function listarUnidades(): Promise<Unidade[]> {
-  const { data, error } = await db().from("nk_unidades").select("*").order("nome");
-  if (error) throw new Error(`Supabase: ${error.message}`);
-  return (data as Row[]).map(rowParaUnidade);
+  return memo(CHAVE, TTL_MS, async () => {
+    const { data, error } = await db().from("nk_unidades").select("*").order("nome");
+    if (error) throw new Error(`Supabase: ${error.message}`);
+    return (data as Row[]).map(rowParaUnidade);
+  });
 }
 
+/** A tabela tem uma linha por unidade: a lista inteira custa o mesmo que uma linha e já vem cacheada. */
 export async function buscarUnidade(slug: string): Promise<Unidade | null> {
-  const { data, error } = await db().from("nk_unidades").select("*").eq("slug", slug).maybeSingle();
-  if (error) throw new Error(`Supabase: ${error.message}`);
-  return data ? rowParaUnidade(data as Row) : null;
+  return (await listarUnidades()).find((u) => u.slug === slug) ?? null;
 }
 
 export async function salvarUnidade(slug: string, patch: UnidadePatch): Promise<Unidade> {
@@ -84,5 +94,6 @@ export async function salvarUnidade(slug: string, patch: UnidadePatch): Promise<
   if (patch.horarios !== undefined) row.horarios = patch.horarios;
   const { data, error } = await db().from("nk_unidades").update(row).eq("slug", slug).select("*").single();
   if (error) throw new Error(`Supabase: ${error.message}`);
+  invalidar(CHAVE);
   return rowParaUnidade(data as Row);
 }

@@ -45,10 +45,12 @@ export function AgendaClient({ unidade, hoje, dataInicial }: { unidade: Unidade;
   const passou = (s: Slot) => bateriaPassou(data, s.fim, agora);
   const emPista = (s: Slot) => bateriaEmPista(data, s.horario, s.fim, agora);
 
-  const recarregar = useCallback(async () => {
+  // `fresh` = buscar na Sellflux ignorando o cache do servidor (30 s). Só o botão "Atualizar" pede isso:
+  // depois de criar ou editar, o próprio servidor já descartou o cache, e a recarga normal traz o novo.
+  const recarregar = useCallback(async (fresh = false) => {
     const meu = ++seq.current;
     try {
-      const g = await api<Grade>(`/api/agenda?unidade=${unidade.slug}&data=${data}`);
+      const g = await api<Grade>(`/api/agenda?unidade=${unidade.slug}&data=${data}${fresh ? "&fresh=1" : ""}`);
       if (meu === seq.current) setResultado({ chave, grade: g, erro: null });
     } catch (e) {
       if (meu === seq.current) setResultado({ chave, grade: null, erro: e instanceof ApiError ? e.payload : { mensagem: String(e) } });
@@ -56,9 +58,9 @@ export function AgendaClient({ unidade, hoje, dataInicial }: { unidade: Unidade;
   }, [unidade.slug, data, chave]);
 
   // recarrega mantendo a grade atual na tela (botão atualizar, pós-criação/edição)
-  const atualizar = useCallback(async () => {
+  const atualizar = useCallback(async (fresh = false) => {
     setAtualizando(true);
-    try { await recarregar(); } finally { setAtualizando(false); }
+    try { await recarregar(fresh); } finally { setAtualizando(false); }
   }, [recarregar]);
 
   // o setState só acontece depois do await (resposta da API), não de forma síncrona no effect
@@ -136,7 +138,7 @@ export function AgendaClient({ unidade, hoje, dataInicial }: { unidade: Unidade;
       {/* barra de controles */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <DateNav data={data} hoje={hojeReal} onChange={setData} />
-        <Button variant="outline" size="icon" onClick={() => void atualizar()} disabled={carregando} aria-label="Atualizar agenda" title="Buscar de novo na Sellflux">
+        <Button variant="outline" size="icon" onClick={() => void atualizar(true)} disabled={carregando} aria-label="Atualizar agenda" title="Buscar de novo na Sellflux">
           <RefreshCwIcon className={cn(atualizando && "animate-spin")} />
         </Button>
         <div className="ml-auto flex items-center gap-2">

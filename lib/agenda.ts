@@ -38,11 +38,16 @@ export async function unidadeOuErro(slug: string): Promise<Unidade & { sellfluxU
   return u as Unidade & { sellfluxUserId: number };
 }
 
-export async function carregarGrade(unidade: Unidade & { sellfluxUserId: number }, data: string): Promise<Grade> {
+/**
+ * `fresh` força a leitura na Sellflux, ignorando o cache. Obrigatório antes de gravar
+ * (duas atendentes podem reservar a mesma bateria no mesmo minuto); a tela usa o cache.
+ */
+export async function carregarGrade(unidade: Unidade & { sellfluxUserId: number }, data: string, opts?: { fresh?: boolean }): Promise<Grade> {
   const reservas = await listarReservas({
     unidadeUserId: unidade.sellfluxUserId,
     startIso: localToUtcIso(data, "00:00"),
     endIso: localToUtcIso(data, "23:59"),
+    fresh: opts?.fresh,
   });
   return { unidade, data, ...montarGrade(unidade, data, reservas) };
 }
@@ -81,8 +86,8 @@ export async function criarReserva(input: NovaReserva): Promise<Reserva> {
   validarSlot(unidade, input.data, input.horario);
   const telefone = telefoneOuErro(input.telefone);
 
-  // recalcula no servidor — nunca confia na vaga que a tela mostrou
-  const grade = await carregarGrade(unidade, input.data);
+  // recalcula no servidor — nunca confia na vaga que a tela mostrou, nem no cache da listagem
+  const grade = await carregarGrade(unidade, input.data, { fresh: true });
   const vagas = vagasEm(grade.slots, input.horario) ?? 0;
   if (input.pessoas > vagas) lotado(grade, input.horario, input.pessoas, vagas);
 
@@ -117,7 +122,7 @@ export async function editarReserva(id: string, input: EditarReserva): Promise<R
   if (!telefone) throw new AppError(400, { erro: "telefone_invalido", mensagem: "Esta reserva não tem telefone; informe um." });
   validarSlot(unidade, data, horario);
 
-  const grade = await carregarGrade(unidade, data);
+  const grade = await carregarGrade(unidade, data, { fresh: true });
   const vagas = vagasEm(grade.slots, horario, data === atual.data ? atual.id : undefined) ?? 0;
   if (pessoas > vagas) lotado(grade, horario, pessoas, vagas);
 
