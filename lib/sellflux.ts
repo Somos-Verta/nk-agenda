@@ -304,7 +304,7 @@ export type VinculosSchedule = { leadId: number | null; chatId: number | null };
 /**
  * `GET /crm/schedules/:id/links` devolve vínculos `{source_type, source_id, target_type, target_id}`;
  * os que interessam são `lead → schedule` e `chat → schedule`. O id do chat não aparece em nenhuma outra rota
- * (testado 15/09/2026), e é ele que abre a conversa em app.sellflux.com/chats/:id.
+ * (testado 15/09/2026), e é ele que abre a conversa em app.vertachat.com/chats/:id.
  */
 export async function buscarVinculosSchedule(id: number | string, unidadeUserId: number): Promise<VinculosSchedule> {
   const body = await sf(`/api/v1/crm/schedules/${id}/links`, { query: { acting_user_id: actingUserId(unidadeUserId) } });

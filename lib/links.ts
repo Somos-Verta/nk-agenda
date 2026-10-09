@@ -1,5 +1,5 @@
 /** Links para a interface da Sellflux (seguro no browser: não usa token). */
-export const SELLFLUX_APP = "https://app.sellflux.com";
+export const SELLFLUX_APP = "https://app.vertachat.com";
 
 /** Página do lead na Sellflux, já na aba de agendamentos. */
 export function urlLeadSellflux(leadId: number | string): string {

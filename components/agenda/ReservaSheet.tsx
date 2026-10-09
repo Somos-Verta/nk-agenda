@@ -59,7 +59,9 @@ export function ReservaSheet({ grade, reserva, agora, onClose, onAlterada }: {
   const n = Math.max(1, Number(pessoas) || 1);
   const telefoneValidado = validarTelefone(telefone);
   const telefoneMudou = telefoneValidado.ok && telefoneValidado.e164 !== reserva.telefone;
-  const telefoneInvalido = telefone !== "" && !telefoneValidado.ok;
+  // só bloqueia se o telefone foi mexido: reservas antigas podem ter número fora da regra estrita e continuam editáveis
+  const telefoneOriginal = reserva.telefone ? mascararTelefone(reserva.telefone) : "";
+  const telefoneInvalido = telefone !== "" && telefone !== telefoneOriginal && !telefoneValidado.ok;
   const descricaoMudou = descricao.trim() !== (reserva.description ?? "").trim();
   const mudou = nome !== reserva.nome || n !== reserva.pessoas || horario !== reserva.horario || telefoneMudou || descricaoMudou;
   const efeito = efeitoDoStatus(reserva);
