@@ -28,7 +28,7 @@ pnpm dev
 | `SELLFLUX_TOKEN` | Chave de API do projeto Sellflux. Só é lida no servidor. |
 | `APP_PASSWORD` | Senha compartilhada das atendentes (tela de login). |
 | `SESSION_SECRET` | String aleatória longa que assina o cookie de sessão (`openssl rand -hex 32`). |
-| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Projeto Supabase com a tabela `nk_unidades`. Service role, só no servidor. |
+| `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Projeto Supabase com as tabelas `nk_unidades` e `nk_reserva_status`. Service role, só no servidor. |
 
 Primeiro acesso: entre em **Configuração** e ligue cada unidade ao seu usuário "Recepção" da Sellflux;
 ajuste capacidade (karts por bateria) e horários por dia da semana.
@@ -51,7 +51,8 @@ Nova reserva ──> POST /api/agenda ──> recalcula vagas no servidor
                                       ├─ lead: busca por telefone → cria ou atualiza
                                       └─ POST /crm/schedules (subject "Nome Np", description padrão)
 Editar ──────> PUT /api/agenda/:id     (re-checa vaga ignorando a própria reserva)
-Cancelar ────> DELETE /api/agenda/:id  (PUT status=2; fallback: prefixo "CANCELADO - ")
+Status ──────> PUT /api/agenda/:id/status  (Sellflux: o que a API aceita · nk_reserva_status: os 6)
+Cancelar ────> DELETE /api/agenda/:id  (= status Cancelado: PUT status="cancelado" + ❌ no título)
 ```
 
 - **Cache.** Cada chamada à Sellflux custa ~700 ms de latência fixa (independe do tamanho da resposta), e a
@@ -62,17 +63,47 @@ Cancelar ────> DELETE /api/agenda/:id  (PUT status=2; fallback: prefixo 
   60 s em memória.
   Criar, editar e cancelar invalidam a tag na hora. O botão **Atualizar** manda `?fresh=1`: lê direto na Sellflux
   e descarta o cache para todo mundo. A checagem de vaga antes de gravar **nunca** usa cache.
+- **Status** (campo "Andamento" da Sellflux): ver [Status das reservas](#status-das-reservas).
 - Telefone: máscara `(62) 98765-4321` no formulário e validação estrita (DDD existente, 9º dígito, tamanho,
   sem sequências) no cliente e no servidor (`validarTelefone`); gravado em E.164 no lead e na descrição.
 - Ocupação de um slot = soma das pessoas dos agendamentos ativos que começam nele. A quantidade vem do
   título (`9p`) ou da linha "Quantidade de participantes" da descrição. Agendamento fora do padrão
   (criado à mão na Sellflux) conta como **1** e aparece com aviso.
-- Agendamentos canceladas não ocupam e aparecem riscados.
+- Agendamentos cancelados não ocupam e aparecem riscados.
 - O token da Sellflux e a service role do Supabase nunca chegam ao browser: só os route handlers os leem.
 - Cookie de sessão HMAC (`proxy.ts` bloqueia tudo sem ele; APIs devolvem 401).
 
 Referência da API Sellflux: [SELLFLUX-API.md](SELLFLUX-API.md). Versão anterior (HTML único, sem
 backend): `legacy/agenda-nacional-kart.html`.
+
+## Status das reservas
+
+Os 6 status do campo "Andamento" da Sellflux — Nenhum, Agendada, Concluído, Reagendado, Não compareceu, Cancelado —
+podem ser escolhidos ao **criar** a reserva (menos Cancelado) e **mudados** na ficha dela.
+
+A API pública da Sellflux só grava **3 deles** (testado 10/10/2026: `PUT /crm/schedules/:id` com `status` `1`, `2` ou
+`"cancelado"`). Reagendado, Não compareceu e Nenhum não têm como ser gravados por API (a etapa `schedule_outcome` das
+automações Flux v2 os conhece, mas não há como disparar uma por agendamento). Por isso:
+
+- **Tabela `nk_reserva_status`** (uma linha por reserva que ganhou status pelo app): guarda o status completo (`status`),
+  o dia (`data`) e o `base_status` — o status que a Sellflux mostrava quando o app gravou. O app mostra esse status.
+- **Sellflux recebe só o que aceita**: Agendada, Concluído, Cancelado (este também põe ❌ no título, convenção da
+  equipe). Para os outros três a ficha avisa que o status só existe no app e como a Sellflux mostra a reserva.
+- **A Sellflux manda quando muda depois**: se alguém trocar o andamento direto na Sellflux, o `base_status` deixa de
+  bater e o registro é ignorado (volta a valer na próxima gravação pelo app). O registro nunca esconde uma mudança de lá.
+- Só **Cancelado** libera karts. Reativar uma reserva cancelada reconfere a vaga (409 se a bateria encheu).
+- Sair de Cancelado para um status que a Sellflux não grava devolve a reserva a Agendada lá (e tira o ❌).
+
+Aplicar a migração antes de publicar o código: `supabase/migrations/20261010000000_create_nk_reserva_status.sql`
+(SQL Editor do projeto do `nk_unidades`). Sem a tabela, a agenda não carrega.
+
+### Aposentar o registro (quando a API aceitar os 6 status)
+
+1. Em `lib/status.ts`, ampliar `statusParaSellflux` com os valores novos (é o único lugar).
+2. Listar o que falta empurrar: `select * from nk_reserva_status where status <> base_status order by data;`
+3. Para cada linha, ler o agendamento na Sellflux; se o status dele ainda é o `base_status` (ninguém mexeu lá), gravar
+   `status` com `PUT /crm/schedules/:id`. Se já mudou, a Sellflux vence e a linha é descartada.
+4. Remover `aplicarStatusLocal`, as funções de status de `lib/db.ts` e a tabela (`drop table nk_reserva_status`).
 
 ## Marca
 
@@ -90,6 +121,7 @@ Cores da Nacional Kart: **#003399** (topbar) e **#011d4c** (botões, abas ativas
   Reservar (ou mover) para bateria/data que já passou pede confirmação.
 - Avisos no topo: baterias com mais pessoas que karts e agendamentos fora da grade de horários.
 - Botão "Regras" explica o cálculo (cancelada não ocupa; não compareceu/concluída continuam ocupando…).
+- Ficha da reserva: campo **Andamento** (os 6 status) salva na hora; Cancelar pede confirmação.
 - Uma rota por unidade no menu (`/agenda/goiania?d=2026-09-14`); a data fica na query.
 
 ## Estrutura
@@ -97,13 +129,14 @@ Cores da Nacional Kart: **#003399** (topbar) e **#011d4c** (botões, abas ativas
 ```
 app/agenda/[unidade]  quadro do dia, nova reserva, editar/cancelar  ·  app/agenda redireciona para a primeira unidade
 app/configuracao      capacidade, duração, horários (com preview das baterias geradas), preço por pessoa e usuário Sellflux
-app/api/agenda        GET grade · POST cria · PUT/DELETE em [id] · GET [id]/vinculos (lead e chat na Sellflux)
+app/api/agenda        GET grade · POST cria · PUT/DELETE em [id] · PUT [id]/status · GET [id]/vinculos (lead e chat na Sellflux)
 app/api/config        GET/PUT nk_unidades
 app/api/sellflux/users lista usuários para o mapeamento
-lib/agenda.ts         regras (vaga, 409, lead, textos)
+lib/agenda.ts         regras (vaga, 409, lead, textos, status)
+lib/status.ts         os 6 status, o que vai para a Sellflux e como o registro local se sobrepõe a ela
 lib/sellflux.ts       cliente da API pública (normaliza os shapes de /crm/*)
 lib/db.ts             único ponto de acesso ao banco
 lib/slots.ts          grade e ocupação   ·   lib/parse.ts  título/descrição/telefone   ·   lib/tz.ts  fuso
 components/agenda     SlotRow (bloco da bateria + linhas de reserva) · RingVagas (anel de vagas) · status (ícones/cores) · HorarioPicker · PessoasStepper · RegrasDialog
-supabase/migrations   SQL da tabela nk_unidades
+supabase/migrations   SQL das tabelas nk_unidades e nk_reserva_status
 ```

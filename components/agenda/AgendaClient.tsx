@@ -225,7 +225,7 @@ export function AgendaClient({ unidade, hoje, dataInicial }: { unidade: Unidade;
           horarioInicial={novaHorario}
           agora={agora}
           onClose={() => setNovaHorario(undefined)}
-          onCriada={(r) => { toast.success(`Reserva de ${r.nome} (${r.pessoas}p) às ${r.horario} criada.`); setNovaHorario(undefined); void atualizar(); }}
+          onCriada={(r) => { toast.success(`Reserva de ${r.nome} (${r.pessoas}p) às ${r.horario} criada.`); if (r.aviso) toast.warning(r.aviso); setNovaHorario(undefined); void atualizar(); }}
           onConflito={() => void atualizar()}
         />
       )}

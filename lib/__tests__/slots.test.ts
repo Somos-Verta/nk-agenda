@@ -8,7 +8,7 @@ const goiania: Unidade = {
 };
 
 function reserva(p: Partial<Reserva> & { horario: string; pessoas: number }): Reserva {
-  return { id: Math.random(), nome: "X", pessoasIdentificadas: true, telefone: null, data: "2026-09-14", startIso: "", endIso: null, subject: "", description: null, status: "agendado", outcome: null, cancelado: false, leadIds: [], ...p };
+  return { id: Math.random(), nome: "X", pessoasIdentificadas: true, telefone: null, data: "2026-09-14", startIso: "", endIso: null, subject: "", description: null, status: "agendado", statusSellflux: "agendado", outcome: null, cancelado: false, leadIds: [], ...p };
 }
 
 describe("tz", () => {

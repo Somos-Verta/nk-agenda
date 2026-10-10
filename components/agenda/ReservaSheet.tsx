@@ -14,12 +14,14 @@ import type { Grade } from "@/lib/agenda";
 import type { VinculosSchedule } from "@/lib/sellflux";
 import { urlAgendaSellflux, urlChatSellflux, urlLeadSellflux } from "@/lib/links";
 import { formatarTelefone, mascararTelefone, validarTelefone } from "@/lib/parse";
-import type { Reserva } from "@/lib/slots";
+import { STATUS_LABEL, type Reserva, type StatusReserva } from "@/lib/slots";
+import { soNoApp } from "@/lib/status";
 import { cn } from "@/lib/utils";
 import { formatarDataLonga } from "./DateNav";
 import { HorarioPicker } from "./HorarioPicker";
 import { PessoasStepper } from "./PessoasStepper";
 import { TelefoneInput } from "./TelefoneInput";
+import { StatusSelect } from "./StatusSelect";
 import { STATUS_UI, StatusIcon } from "./status";
 import { bateriaPassou, type Agora } from "./useAgora";
 
@@ -55,6 +57,9 @@ export function ReservaSheet({ grade, reserva, agora, onClose, onAlterada }: {
   const [confirmar, setConfirmar] = useState(false);
   const [confirmarPassado, setConfirmarPassado] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [statusSel, setStatusSel] = useState<StatusReserva>(reserva.status);
+  const [salvandoStatus, setSalvandoStatus] = useState(false);
+  const [erroStatus, setErroStatus] = useState<string | null>(null);
 
   const n = Math.max(1, Number(pessoas) || 1);
   const telefoneValidado = validarTelefone(telefone);
@@ -114,6 +119,25 @@ export function ReservaSheet({ grade, reserva, agora, onClose, onAlterada }: {
     }
   }
 
+  /** Salva na hora, sem passar pelo "Salvar alterações" (são ações separadas). Cancelar pede confirmação antes. */
+  async function mudarStatus(novo: StatusReserva) {
+    if (novo === reserva.status) { setStatusSel(novo); return; }
+    if (novo === "cancelado") { setConfirmar(true); return; }
+    setErroStatus(null);
+    setStatusSel(novo);
+    setSalvandoStatus(true);
+    try {
+      await api(`/api/agenda/${reserva.id}/status`, { method: "PUT", json: { unidade: grade.unidade.slug, status: novo } });
+      toast.success(`${reserva.nome}: ${STATUS_LABEL[novo]}.`);
+      onAlterada();
+    } catch (err) {
+      setStatusSel(reserva.status);
+      setErroStatus(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSalvandoStatus(false);
+    }
+  }
+
   async function cancelar() {
     setErro(null);
     setCancelando(true);
@@ -150,6 +174,17 @@ export function ReservaSheet({ grade, reserva, agora, onClose, onAlterada }: {
         </SheetHeader>
 
         <div className="grid gap-3 px-4 pb-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="e-status">Andamento</Label>
+            <StatusSelect id="e-status" value={statusSel} onChange={(s) => void mudarStatus(s)} disabled={salvandoStatus} />
+            {soNoApp(reserva) && (
+              <p className="text-xs text-muted-foreground">
+                Este status só existe no app: a API da Sellflux ainda não grava <strong>{STATUS_LABEL[reserva.status]}</strong>. Lá a reserva aparece como <strong>{STATUS_LABEL[reserva.statusSellflux]}</strong>.
+              </p>
+            )}
+            {erroStatus && <p className="text-sm text-lotado">{erroStatus}</p>}
+          </div>
+
           {!reserva.pessoasIdentificadas && (
             <p className="rounded-md border border-enchendo/40 bg-enchendo-soft p-2.5 text-sm">
               Este agendamento não tem a quantidade no título (foi criado direto na Sellflux). Está contando como <strong>1 pessoa</strong> — ajuste abaixo.
@@ -238,10 +273,10 @@ export function ReservaSheet({ grade, reserva, agora, onClose, onAlterada }: {
           <SheetFooter className="border-t">
             {confirmar ? (
               <div className="flex w-full flex-col gap-2">
-                <p className="text-sm">Cancelar a reserva de <strong>{reserva.nome}</strong>? Libera {reserva.pessoas} kart{reserva.pessoas === 1 ? "" : "s"} às {reserva.horario}. Na Sellflux, o título recebe ❌.</p>
+                <p className="text-sm">Cancelar a reserva de <strong>{reserva.nome}</strong>? Libera {reserva.pessoas} kart{reserva.pessoas === 1 ? "" : "s"} às {reserva.horario}. Na Sellflux, o status vira Cancelado e o título recebe ❌.</p>
                 <div className="flex gap-2">
                   <Button variant="destructive" onClick={cancelar} disabled={cancelando}>{cancelando ? "Cancelando…" : "Sim, cancelar reserva"}</Button>
-                  <Button variant="ghost" onClick={() => setConfirmar(false)}>Voltar</Button>
+                  <Button variant="ghost" onClick={() => { setConfirmar(false); setStatusSel(reserva.status); }}>Voltar</Button>
                 </div>
               </div>
             ) : (

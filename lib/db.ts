@@ -1,11 +1,12 @@
 /**
- * Único ponto de contato com o banco. Hoje: Supabase (projeto compartilhado N8N - RevLab, tabela nk_unidades).
+ * Único ponto de contato com o banco. Hoje: Supabase (projeto compartilhado N8N - RevLab, tabelas nk_unidades e nk_reserva_status).
  * Trocar de banco = reescrever só este arquivo.
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { invalidar, memo } from "./cache";
 import type { Horarios, Unidade } from "./slots";
+import { statusSchema, type StatusLocal } from "./status";
 
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 const intervaloSchema = z
@@ -96,4 +97,35 @@ export async function salvarUnidade(slug: string, patch: UnidadePatch): Promise<
   if (error) throw new Error(`Supabase: ${error.message}`);
   invalidar(CHAVE);
   return rowParaUnidade(data as Row);
+}
+
+// ---------- Status das reservas (registro local; ver lib/status.ts) ----------
+
+type StatusRow = { schedule_id: number | string; data: string; status: string; base_status: string };
+
+function rowParaStatus(r: StatusRow): StatusLocal | null {
+  const status = statusSchema.safeParse(r.status);
+  const base = statusSchema.safeParse(r.base_status);
+  return status.success && base.success ? { id: r.schedule_id, data: r.data, status: status.data, baseStatus: base.data } : null;
+}
+
+/**
+ * Registros do dia — uma consulta por dia (e não por reserva), para rodar em paralelo com a leitura da Sellflux.
+ * Sem cache: a tela precisa ver o status que outra atendente acabou de gravar.
+ */
+export async function listarStatusDoDia(data: string): Promise<StatusLocal[]> {
+  const { data: rows, error } = await db().from("nk_reserva_status").select("schedule_id, data, status, base_status").eq("data", data);
+  if (error) throw new Error(`Supabase: ${error.message}`);
+  return (rows as StatusRow[]).map(rowParaStatus).filter((s): s is StatusLocal => s !== null);
+}
+
+export async function buscarStatusLocal(id: number | string): Promise<StatusLocal | null> {
+  const { data: row, error } = await db().from("nk_reserva_status").select("schedule_id, data, status, base_status").eq("schedule_id", id).maybeSingle();
+  if (error) throw new Error(`Supabase: ${error.message}`);
+  return row ? rowParaStatus(row as StatusRow) : null;
+}
+
+export async function salvarStatusLocal(s: StatusLocal): Promise<void> {
+  const { error } = await db().from("nk_reserva_status").upsert({ schedule_id: s.id, data: s.data, status: s.status, base_status: s.baseStatus }, { onConflict: "schedule_id" });
+  if (error) throw new Error(`Supabase: ${error.message}`);
 }

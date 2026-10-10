@@ -6,6 +6,7 @@
 import { revalidateTag } from "next/cache";
 import { isCancelado, parseNome, parsePessoas, parseTelefone } from "./parse";
 import type { Reserva, StatusReserva } from "./slots";
+import type { ValorStatusSellflux } from "./status";
 import { utcToLocal } from "./tz";
 
 const BASE = "https://apis.sellflux.app";
@@ -173,7 +174,7 @@ export function normalizarSchedule(raw: Record<string, unknown>): Reserva | null
   // O status que a UI da Sellflux mostra é `meeting_outcome` (só vem em GET /:id — ver enriquecerComOutcome).
   // A equipe também marca ❌ no título; qualquer um dos dois cancela.
   const outcome = typeof raw.meeting_outcome === "string" ? raw.meeting_outcome : null;
-  const status: StatusReserva = isCancelado(subject) ? "cancelado" : OUTCOME_STATUS[outcome ?? ""] ?? "agendado";
+  const statusSellflux: StatusReserva = isCancelado(subject) ? "cancelado" : OUTCOME_STATUS[outcome ?? ""] ?? "agendado";
   return {
     id: id as number | string,
     nome: parseNome(subject) || "(sem nome)",
@@ -186,9 +187,11 @@ export function normalizarSchedule(raw: Record<string, unknown>): Reserva | null
     endIso: raw.end_date ? new Date(String(raw.end_date)).toISOString() : null,
     subject,
     description,
-    status,
+    // o registro local (lib/status.ts) pode sobrepor `status` depois; sem ele, vale o da Sellflux
+    status: statusSellflux,
+    statusSellflux,
     outcome,
-    cancelado: status === "cancelado",
+    cancelado: statusSellflux === "cancelado",
     leadIds: idsDe(raw.lead_ids ?? raw.leads),
   };
 }
@@ -328,7 +331,11 @@ export async function criarSchedule(input: ScheduleInput): Promise<ScheduleRaw> 
   return (body && typeof body === "object" && "data" in body && body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body) as ScheduleRaw;
 }
 
-export async function atualizarSchedule(id: number | string, patch: Partial<ScheduleInput> & { status?: 1 | 2 }): Promise<ScheduleRaw> {
+/**
+ * `status` muda o `meeting_outcome` (que a UI mostra): 1 → agendado, 2 → concluído, "cancelado" → cancelado
+ * (testado 10/10/2026). Qualquer outro valor a Sellflux recusa com 500.
+ */
+export async function atualizarSchedule(id: number | string, patch: Partial<ScheduleInput> & { status?: ValorStatusSellflux }): Promise<ScheduleRaw> {
   const body = await sf<Record<string, unknown>>(`/api/v1/crm/schedules/${id}`, { method: "PUT", body: JSON.stringify(patch) });
   invalidarSchedules(id);
   return (body && typeof body === "object" && "data" in body && body.data && typeof body.data === "object" && !Array.isArray(body.data) ? body.data : body) as ScheduleRaw;

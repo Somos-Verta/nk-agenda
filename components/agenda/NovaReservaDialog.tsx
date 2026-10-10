@@ -8,12 +8,14 @@ import { Label } from "@/components/ui/label";
 import { api, ApiError } from "@/lib/api-client";
 import type { Grade } from "@/lib/agenda";
 import { validarTelefone } from "@/lib/parse";
-import type { Reserva } from "@/lib/slots";
+import type { ReservaCriada } from "@/lib/agenda";
+import type { StatusReserva } from "@/lib/slots";
 import { cn } from "@/lib/utils";
 import { formatarDataLonga } from "./DateNav";
 import { HorarioPicker } from "./HorarioPicker";
 import { RingVagas } from "./RingVagas";
 import { PessoasStepper } from "./PessoasStepper";
+import { StatusSelect } from "./StatusSelect";
 import { TelefoneInput } from "./TelefoneInput";
 import { bateriaPassou, type Agora } from "./useAgora";
 
@@ -25,7 +27,7 @@ export function NovaReservaDialog({ grade, horarioInicial, agora, onClose, onCri
   /** hora atual no fuso das unidades — para avisar quando a bateria escolhida já passou */
   agora: Agora | null;
   onClose: () => void;
-  onCriada: (r: Reserva) => void;
+  onCriada: (r: ReservaCriada) => void;
   /** a vaga mudou no servidor (409): o pai recarrega a grade e este diálogo passa a mostrar as vagas reais */
   onConflito?: () => void;
 }) {
@@ -33,6 +35,7 @@ export function NovaReservaDialog({ grade, horarioInicial, agora, onClose, onCri
   const [telefone, setTelefone] = useState("");
   const [pessoas, setPessoas] = useState("1");
   const [horario, setHorario] = useState<string>(horarioInicial ?? "");
+  const [status, setStatus] = useState<StatusReserva>("agendado");
   const [erro, setErro] = useState<string | null>(null);
   const [alternativas, setAlternativas] = useState<Alternativa[]>([]);
   const [enviando, setEnviando] = useState(false);
@@ -59,7 +62,7 @@ export function NovaReservaDialog({ grade, horarioInicial, agora, onClose, onCri
     setAlternativas([]);
     setEnviando(true);
     try {
-      const r = await api<Reserva>("/api/agenda", { method: "POST", json: { unidade: grade.unidade.slug, data: grade.data, horario, nome, telefone, pessoas: n } });
+      const r = await api<ReservaCriada>("/api/agenda", { method: "POST", json: { unidade: grade.unidade.slug, data: grade.data, horario, nome, telefone, pessoas: n, ...(status !== "agendado" ? { status } : {}) } });
       onCriada(r);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -111,6 +114,11 @@ export function NovaReservaDialog({ grade, horarioInicial, agora, onClose, onCri
             ) : (
               <p className="text-sm text-muted-foreground">{algumaCabe ? "Escolha a bateria." : `Nenhuma bateria com ${n} vaga${n === 1 ? "" : "s"} neste dia.`}</p>
             )}
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="status">Andamento</Label>
+            <StatusSelect id="status" value={status} onChange={setStatus} excluir={["cancelado"]} />
           </div>
 
           {noPassado && (

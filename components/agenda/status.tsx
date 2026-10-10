@@ -1,9 +1,10 @@
-import { CalendarIcon, CalendarSyncIcon, CircleCheckIcon, CircleXIcon, UserXIcon, type LucideIcon } from "lucide-react";
+import { CalendarIcon, CalendarSyncIcon, CircleCheckIcon, CircleDashedIcon, CircleXIcon, UserXIcon, type LucideIcon } from "lucide-react";
 import { STATUS_LABEL, type StatusReserva } from "@/lib/slots";
 import { cn } from "@/lib/utils";
 
 /** Ícone e cor de cada status — a mesma legenda que a equipe já conhece da Sellflux. */
 export const STATUS_UI: Record<StatusReserva, { label: string; Icon: LucideIcon; cor: string; fundo: string }> = {
+  nenhum: { label: STATUS_LABEL.nenhum, Icon: CircleDashedIcon, cor: "text-st-nenhum", fundo: "bg-st-nenhum" },
   agendado: { label: STATUS_LABEL.agendado, Icon: CalendarIcon, cor: "text-st-agendado", fundo: "bg-st-agendado" },
   nao_compareceu: { label: STATUS_LABEL.nao_compareceu, Icon: UserXIcon, cor: "text-st-nao-compareceu", fundo: "bg-st-nao-compareceu" },
   reagendado: { label: STATUS_LABEL.reagendado, Icon: CalendarSyncIcon, cor: "text-st-reagendado", fundo: "bg-st-reagendado" },
@@ -12,7 +13,7 @@ export const STATUS_UI: Record<StatusReserva, { label: string; Icon: LucideIcon;
 };
 
 /** Ordem da legenda (igual à da Sellflux). */
-export const STATUS_ORDEM: StatusReserva[] = ["agendado", "nao_compareceu", "reagendado", "concluido", "cancelado"];
+export const STATUS_ORDEM: StatusReserva[] = ["agendado", "nao_compareceu", "reagendado", "concluido", "cancelado", "nenhum"];
 
 export function StatusIcon({ status, className }: { status: StatusReserva; className?: string }) {
   const { Icon, cor, label } = STATUS_UI[status];

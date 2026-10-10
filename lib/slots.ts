@@ -15,10 +15,15 @@ export type Unidade = {
   horarios: Horarios;
 };
 
-/** Espelha o `meeting_outcome` da Sellflux (o status que a UI dela mostra). */
-export type StatusReserva = "agendado" | "reagendado" | "concluido" | "cancelado" | "nao_compareceu";
+/**
+ * Os status do campo "Andamento" da Sellflux. A Sellflux só deixa gravar `agendado`, `concluido` e `cancelado`
+ * pela API; os demais ficam no registro do app (`nk_reserva_status`) — ver `lib/status.ts`.
+ */
+export const STATUS_RESERVA = ["nenhum", "agendado", "concluido", "reagendado", "nao_compareceu", "cancelado"] as const;
+export type StatusReserva = (typeof STATUS_RESERVA)[number];
 
 export const STATUS_LABEL: Record<StatusReserva, string> = {
+  nenhum: "Nenhum",
   agendado: "Agendado",
   reagendado: "Reagendado",
   concluido: "Concluído",
@@ -40,8 +45,10 @@ export type Reserva = {
   endIso: string | null;
   subject: string;
   description: string | null;
-  /** `meeting_outcome` da Sellflux (lido por GET /:id) ou ❌ no título. Só `cancelado` libera vagas. */
+  /** Status que o app mostra: o do registro local quando vale, senão o da Sellflux. Só `cancelado` libera vagas. */
   status: StatusReserva;
+  /** Status como a Sellflux mostra: `meeting_outcome` (lido por GET /:id) ou ❌ no título. */
+  statusSellflux: StatusReserva;
   /** valor cru de `meeting_outcome`, para diagnóstico */
   outcome: string | null;
   cancelado: boolean;

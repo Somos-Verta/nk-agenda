@@ -227,32 +227,53 @@ cacheada, o que custaria mais do que as páginas economizadas. Por isso 2.000.
 O parser aceita `Np`, `NP`, `N pessoas` em qualquer posição e trata ❌ ou "CANCELADO" como cancelado.
 Descrições variam muito; a linha `Quantidade de participantes: N` é o fallback.
 
-### Status do agendamento: `meeting_outcome` (o que a UI mostra) vs. `status` (testado 14/09/2026)
+### Status do agendamento: `meeting_outcome` (o "Andamento" da UI)
 
-O status que a UI da Sellflux exibe ("Agendado", "Cancelado"…) é o campo **`meeting_outcome`**:
+O status que a UI da Sellflux exibe ("Agendada", "Cancelado"…) é o campo **`meeting_outcome`**. Valores vistos em
+150 agendamentos reais (10/10/2026): `completed` (117), `no_show` (21), `scheduled` (7), `canceled` (5). Sempre vem
+preenchido; `rescheduled` e o "Nenhum" da UI não apareceram na amostra.
 
 | `meeting_outcome` | UI | No app |
 |---|---|---|
-| `scheduled` | Agendado | `agendado` — ocupa kart |
+| `scheduled` | Agendada | `agendado` — ocupa kart |
 | `rescheduled` | Reagendado | `reagendado` — ocupa kart (decisão do cliente, 14/09) |
 | `completed` | Concluído | `concluido` — ocupa kart (é passado) |
 | `canceled` | Cancelado | `cancelado` — **não ocupa** |
-| `no_show` (presumido) | Não compareceu | `nao_compareceu` |
+| `no_show` | Não compareceu | `nao_compareceu` — ocupa kart |
 
-- **Só vem em `GET /crm/schedules/:id`** — a listagem não traz o campo. O app busca o detalhe de cada
-  agendamento do dia (6 em paralelo; com 120 simultâneos metade das chamadas falha).
-- **Não é gravável pela API pública**: `PUT` com `meeting_outcome`/`outcome`/`result` → "Nenhum campo
-  para atualizar". Cancelar pela API = só dá para marcar ❌ no título (convenção da equipe, que também
-  marca "Cancelado" na UI — os três ❌ da amostra estavam `canceled`).
+- **Só vem em `GET /crm/schedules/:id`** — a listagem não traz o campo (reconferido 10/10/2026). O app busca o
+  detalhe de cada agendamento do dia (12 em paralelo).
 - Outros campos que só aparecem no `GET /:id`: `platform_event_data.status` ("confirmed"),
-  `conclusion_note`, `organizator_id`, `send_notification`, `work_schedule_id` (null nos exemplos).
+  `conclusion_note`, `organizator_id`, `send_notification`, `work_schedule_id`.
 
-E o campo `status` numérico:
+#### Gravar o status — mudou em relação a 14/09 (testado 10/10/2026)
 
-| `status` | API | UI |
-|---|---|---|
-| `1` | padrão (4.440 de 4.441) | — |
-| `2` | `PUT` aceita; some do filtro `status=1` | **não muda nada** (continua "Agendado") |
-| `3` | `PUT` aceita — e o agendamento **some** de tudo (`GET /:id` → "não encontrado") = remoção lógica |
+`PUT /crm/schedules/:id` com o campo **`status`** agora muda o `meeting_outcome` (a resposta já devolve o novo valor):
 
+| Body | `meeting_outcome` |
+|---|---|
+| `{"status": 1}` (ou `"scheduled"`) | `scheduled` — também **desfaz** Concluído/Cancelado |
+| `{"status": 2}` (ou `"completed"`, `"concluido"`) | `completed` |
+| `{"status": "cancelado"}` (ou `5`, `"canceled"`) | `canceled` |
+| `{"status": 3}` | remoção lógica: o agendamento some de tudo (`GET /:id` dá erro) |
+
+- **Não dá para gravar** Reagendado, Não compareceu nem Nenhum: `"no_show"`, `"rescheduled"`, `"reagendado"`,
+  `"nenhum"`, `null`, `0` e os números 4 a 8 voltam `500 "Status de agenda inválido. Use 1 (agendado), 2 (concluído) ou cancelado."`.
+- Gravar `meeting_outcome`, `outcome`, `outcome_status`, `result`, `andamento` ou `no_show` direto no body continua
+  dando `500 "Nenhum campo para atualizar"` (o campo é ignorado).
+- O MCP de CRM (`POST /crm/mcp`, `scheduleUpdate`) aceita os mesmos valores, nada além. `Accept` precisa ser um único
+  valor `application/json, text/event-stream`.
+- Só existem como ação nas automações Flux v2: etapa `schedule_outcome` (`outcome_status`: `completed`, `no_show`,
+  `canceled`, `rescheduled`), além dos gatilhos `flux_schedule_completed/no_show/cancelled/rescheduled`. Mudar o status
+  por API pode disparar automações da Sellflux que usem esses gatilhos (inclusive mensagens de WhatsApp ao cliente).
+- **O app guarda os 6 status em `nk_reserva_status`** e envia à Sellflux só os que ela aceita — ver README, "Status das reservas".
+
+O campo numérico `status` na **listagem** continua `1` para quase tudo; é o mesmo `status` do PUT acima, mas a
+listagem mostra `1` mesmo para Concluído/Cancelado (o resultado está em `meeting_outcome`, só no detalhe).
 `task_completed` não é editável. `?status=` vazio devolve 0 itens — omitir o parâmetro.
+
+#### Filtro de período (doc diz que existe, mas não funciona)
+
+A doc republicada em 17/09/2026 passou a dizer "Use `start_date`/`end_date` para consultar uma janela de tempo",
+mas **a API continua ignorando** (reconferido 10/10/2026: `total` = 5.612 com janela ISO, com `YYYY-MM-DD` e com
+datas antigas). O app segue lendo páginas e filtrando no servidor.

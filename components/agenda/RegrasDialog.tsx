@@ -32,7 +32,7 @@ export function RegrasDialog({ unidade, onClose }: { unidade: Unidade; onClose: 
 
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg border bg-muted/40 p-3">
           {STATUS_ORDEM.map((st) => <StatusTag key={st} status={st} className="text-sm" />)}
-          <p className="basis-full text-xs text-muted-foreground">Status como na Sellflux. Só <strong>Cancelado</strong> libera os karts da bateria.</p>
+          <p className="basis-full text-xs text-muted-foreground">Os mesmos status da Sellflux, e dá para mudar na ficha da reserva. Só <strong>Cancelado</strong> libera os karts da bateria. Reagendado, Não compareceu e Nenhum ficam só no app (a Sellflux ainda não aceita gravá-los por API).</p>
         </div>
 
         <ol className="grid gap-2.5 text-sm">
